@@ -297,12 +297,6 @@ static struct mtd_partition partition_info[] = {
  	  .size		= MTDPART_SIZ_FULL },
 };
 
-static struct mtd_partition partition_info_recovery[] = {
-  	{ .name		= "Base",
-  	  .offset	= 0,
- 	  .size		= MTDPART_SIZ_FULL },
-};
-
 static struct mtd_partition partition_info_cart[] = {
 	{ .name		= "Cartridge",
 	  .offset	= 0,
@@ -2651,13 +2645,8 @@ static int lf1000_nand_probe(struct platform_device *pdev)
 	}
 #endif
 	if (base_parts_nb == 0) {
-		if (gpio_get_boot_source_config() == SCRATCH_BOOT_SOURCE_USB) {
-			base_parts = partition_info_recovery;
-			base_parts_nb = ARRAY_SIZE(partition_info_recovery);
-		} else {
-			base_parts = partition_info;
-			base_parts_nb = ARRAY_SIZE(partition_info);
-		}
+		base_parts = partition_info;
+		base_parts_nb = ARRAY_SIZE(partition_info);
 		part_type = "static";
 	}
 
