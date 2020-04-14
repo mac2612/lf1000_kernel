@@ -90,6 +90,12 @@ tune-$(CONFIG_CPU_XSC3)		:=$(call cc-option,-mtune=xscale,-mtune=strongarm110) -
 tune-$(CONFIG_CPU_FEROCEON)	:=$(call cc-option,-mtune=marvell-f,-mtune=xscale)
 tune-$(CONFIG_CPU_V6)		:=$(call cc-option,-mtune=arm1136j-s,-mtune=strongarm)
 
+# tune for LF1000 ARM926T processor
+ifeq ($(CONFIG_ARCH_LF1000),y)
+arch-y :=-D__LINUX_ARM_ARCH__=5
+tune-y :=-mcpu=arm926ej-s
+endif
+
 ifeq ($(CONFIG_AEABI),y)
 CFLAGS_ABI	:=-mabi=aapcs-linux -mno-thumb-interwork
 else
@@ -98,6 +104,10 @@ endif
 
 ifeq ($(CONFIG_ARM_UNWIND),y)
 CFLAGS_ABI	+=-funwind-tables
+endif
+
+ifeq ($(CONFIG_ALIGNMENT_TRAP),y)
+CFLAGS_ABI	+=$(call cc-option,-mno-unaligned-access,)
 endif
 
 ifeq ($(CONFIG_THUMB2_KERNEL),y)
@@ -146,6 +156,7 @@ machine-$(CONFIG_ARCH_IXP23XX)		:= ixp23xx
 machine-$(CONFIG_ARCH_IXP4XX)		:= ixp4xx
 machine-$(CONFIG_ARCH_KIRKWOOD)		:= kirkwood
 machine-$(CONFIG_ARCH_KS8695)		:= ks8695
+machine-$(CONFIG_ARCH_LF1000)		:= lf1000
 machine-$(CONFIG_ARCH_LH7A40X)		:= lh7a40x
 machine-$(CONFIG_ARCH_LOKI) 		:= loki
 machine-$(CONFIG_ARCH_LPC32XX)		:= lpc32xx
@@ -180,17 +191,14 @@ machine-$(CONFIG_ARCH_S5PV210)		:= s5pv210
 machine-$(CONFIG_ARCH_S5PV310)		:= s5pv310
 machine-$(CONFIG_ARCH_SA1100)		:= sa1100
 machine-$(CONFIG_ARCH_SHARK)		:= shark
-machine-$(CONFIG_ARCH_SHMOBILE) 	:= shmobile
 machine-$(CONFIG_ARCH_STMP378X)		:= stmp378x
 machine-$(CONFIG_ARCH_STMP37XX)		:= stmp37xx
 machine-$(CONFIG_ARCH_TCC8K)		:= tcc8k
 machine-$(CONFIG_ARCH_TEGRA)		:= tegra
 machine-$(CONFIG_ARCH_U300)		:= u300
-machine-$(CONFIG_ARCH_U8500)		:= ux500
 machine-$(CONFIG_ARCH_VERSATILE)	:= versatile
 machine-$(CONFIG_ARCH_VEXPRESS)		:= vexpress
 machine-$(CONFIG_ARCH_W90X900)		:= w90x900
-machine-$(CONFIG_ARCH_NUC93X)		:= nuc93x
 machine-$(CONFIG_FOOTBRIDGE)		:= footbridge
 machine-$(CONFIG_MACH_SPEAR300)		:= spear3xx
 machine-$(CONFIG_MACH_SPEAR310)		:= spear3xx
@@ -205,13 +213,13 @@ plat-$(CONFIG_ARCH_S3C64XX)	:= samsung
 plat-$(CONFIG_ARCH_STMP3XXX)	:= stmp3xxx
 plat-$(CONFIG_ARCH_TCC_926)	:= tcc
 plat-$(CONFIG_PLAT_IOP)		:= iop
-plat-$(CONFIG_PLAT_NOMADIK)	:= nomadik
 plat-$(CONFIG_PLAT_ORION)	:= orion
 plat-$(CONFIG_PLAT_PXA)		:= pxa
 plat-$(CONFIG_PLAT_S3C24XX)	:= s3c24xx samsung
 plat-$(CONFIG_PLAT_S5P)		:= s5p samsung
 plat-$(CONFIG_PLAT_SPEAR)	:= spear
 plat-$(CONFIG_PLAT_VERSATILE)	:= versatile
+plat-$(CONFIG_PLAT_MES)		:= mes
 
 ifeq ($(CONFIG_ARCH_EBSA110),y)
 # This is what happens if you forget the IOCS16 line.

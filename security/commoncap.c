@@ -95,8 +95,11 @@ int cap_capable(struct task_struct *tsk, const struct cred *cred, int cap,
  */
 int cap_settime(struct timespec *ts, struct timezone *tz)
 {
+/* For ttpro 2462, break security */
+#if 0
 	if (!capable(CAP_SYS_TIME))
 		return -EPERM;
+#endif
 	return 0;
 }
 

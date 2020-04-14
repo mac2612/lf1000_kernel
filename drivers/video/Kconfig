@@ -80,7 +80,7 @@ config FIRMWARE_EDID
 	 suffer from this problem.
 
 config FB_DDC
-       tristate
+       tristate ""
        depends on FB
        select I2C_ALGOBIT
        select I2C
@@ -95,7 +95,7 @@ config FB_BOOT_VESA_SUPPORT
 	  of VESA video modes set at an early boot stage via the vga= parameter.
 
 config FB_CFB_FILLRECT
-	tristate
+	tristate "Software Fill Rect"
 	depends on FB
 	default n
 	---help---
@@ -104,7 +104,7 @@ config FB_CFB_FILLRECT
 	  (accelerated) version.
 
 config FB_CFB_COPYAREA
-	tristate
+	tristate "Software Copy"
 	depends on FB
 	default n
 	---help---
@@ -113,7 +113,7 @@ config FB_CFB_COPYAREA
 	  version.
 
 config FB_CFB_IMAGEBLIT
-	tristate
+	tristate "Software Blitter"
 	depends on FB
 	default n
 	---help---
@@ -204,12 +204,12 @@ config FB_SVGALIB
 	  cards.
 
 config FB_MACMODES
-       tristate
+       tristate "MAC Codes"
        depends on FB
        default n
 
 config FB_BACKLIGHT
-	bool
+	bool "LCD Backlight"
 	depends on FB
 	select BACKLIGHT_LCD_SUPPORT
 	select BACKLIGHT_CLASS_DEVICE
@@ -2110,6 +2110,14 @@ config FB_SH7760
 	  color operation, with depths ranging from 1 bpp to 8 bpp monochrome
 	  and 8, 15 or 16 bpp color; 90 degrees clockwise display rotation for
 	  panels <= 320 pixel horizontal resolution.
+
+config FB_LF1000
+	tristate "LF1000 SoC Framebuffer support"
+	select LF1000_SCREEN
+	depends on ARCH_LF1000 && FB
+	---help---
+	  Say Y here to enable support for the LF1000 display controller
+	  and Multi-Layer controller.  Say M to build it as a module.
 
 config FB_DA8XX
 	tristate "DA8xx/OMAP-L1xx Framebuffer support"

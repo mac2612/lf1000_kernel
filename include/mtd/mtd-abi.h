@@ -126,7 +126,10 @@ struct otp_info {
 #define MEMERASE64		_IOW('M', 20, struct erase_info_user64)
 #define MEMWRITEOOB64		_IOWR('M', 21, struct mtd_oob_buf64)
 #define MEMREADOOB64		_IOWR('M', 22, struct mtd_oob_buf64)
-#define MEMISLOCKED		_IOR('M', 23, struct erase_info_user)
+#define BBTERASE		_IO('M', 23)
+#define BBTSCAN			_IO('M', 24)
+#define SDOTPPREP		_IO('M', 25)
+#define MEMISLOCKED		_IOR('M', 26, struct erase_info_user)
 
 /*
  * Obsolete legacy interface. Keep it in order not to break userspace

@@ -495,6 +495,18 @@ config USB_LANGWELL
 	default USB_GADGET
 	select USB_GADGET_SELECTED
 
+config USB_GADGET_LF1000
+	boolean "LF1000 USB Device Controller"
+	depends on ARCH_LF1000
+	select USB_GADGET_DUALSPEED
+	help
+		USB Gadget support for LF1000
+
+config USB_LF1000
+	tristate
+	depends on USB_GADGET_LF1000
+	default USB_GADGET
+	select USB_GADGET_SELECTED
 
 #
 # LAST -- dummy/emulated controller
@@ -533,6 +545,12 @@ config USB_DUMMY_HCD
 # first and will be selected by default.
 
 endchoice
+
+config USB_LF1000_DEBUG
+	boolean "LF1000 USB Device Controller Debugging."
+	depends on USB_LF1000
+	help
+		USB Gadget debugging for LF1000
 
 config USB_GADGET_DUALSPEED
 	bool

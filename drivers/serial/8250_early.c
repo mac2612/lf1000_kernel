@@ -40,6 +40,8 @@
 #include <asm/fixmap.h>
 #endif
 
+#include <mach/uart.h>
+
 struct early_serial8250_device {
 	struct uart_port port;
 	char options[16];		/* e.g., 115200n8 */

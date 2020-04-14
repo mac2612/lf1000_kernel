@@ -49,6 +49,8 @@
 #include <linux/jiffies.h>
 #include <linux/uaccess.h>
 
+asmlinkage void sys_sync(void); /* it's really int */
+
 #define PFX "SoftDog: "
 
 #define TIMER_MARGIN	60		/* Default is 60 seconds */
@@ -100,6 +102,7 @@ static void watchdog_fire(unsigned long data)
 		printk(KERN_CRIT PFX "Triggered - Reboot ignored.\n");
 	else {
 		printk(KERN_CRIT PFX "Initiating system reboot.\n");
+		sys_sync();
 		emergency_restart();
 		printk(KERN_CRIT PFX "Reboot didn't ?????\n");
 	}

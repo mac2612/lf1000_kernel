@@ -778,6 +778,10 @@ struct usb_gadget_driver {
 
 	/* FIXME support safe rmmod */
 	struct device_driver	driver;
+	/* These functions are here for supporting obscure features required by
+	 * leapfrog. */
+	void			(*vbus_session)(struct usb_gadget *, int is_active);
+	int			(*is_enabled)(struct usb_gadget *);
 };
 
 
@@ -819,7 +823,12 @@ int usb_gadget_probe_driver(struct usb_gadget_driver *driver,
  * finally returns.  It's expected that the unbind() functions
  * will in in exit sections, so may not be linked in some kernels.
  */
-int usb_gadget_unregister_driver(struct usb_gadget_driver *driver);
+int usb_gadget_unregister_driver (struct usb_gadget_driver *driver);
+
+/**
+ * Obscure feature required by leapfrog
+ */
+void usb_gadget_watchdog_cancel(void);
 
 /*-------------------------------------------------------------------------*/
 

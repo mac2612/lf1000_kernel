@@ -150,6 +150,15 @@ config BACKLIGHT_ATMEL_PWM
 	  To compile this driver as a module, choose M here: the module will be
 	  called atmel-pwm-bl.
 
+
+config BACKLIGHT_LF1000_PWM
+	tristate "LF1000 PWM backlight control"
+	depends on BACKLIGHT_CLASS_DEVICE && ARCH_LF1000 && FB_LF1000
+	default y
+	help
+	  Say Y here if you want PWM backlight control on LeapFrog boards.  To
+	  compile as a module, choose M.
+
 config BACKLIGHT_EP93XX
 	tristate "Cirrus EP93xx Backlight Driver"
 	depends on FB_EP93XX

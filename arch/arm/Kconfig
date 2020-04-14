@@ -187,6 +187,9 @@ config VECTORS_BASE
 	help
 	  The base address of exception vectors.
 
+config RUNTIME_PHYS_OFFSET
+	bool
+
 source "init/Kconfig"
 
 source "kernel/Kconfig.freezer"
@@ -436,6 +439,16 @@ config ARCH_IXP4XX
 	select DMABOUNCE if PCI
 	help
 	  Support for Intel's IXP4XX (XScale) family of processors.
+
+config ARCH_LF1000
+	bool "LeapFrog LF1000"
+	depends on MMU
+	select CPU_ARM926T
+	#select RUNTIME_PHYS_OFFSET
+	select PLAT_MES
+        select ARCH_USES_GETTIMEOFFSET
+	help
+	  This enables support for LeapFrog LF1000 family of processors.
 
 config ARCH_DOVE
 	bool "Marvell Dove"
@@ -886,6 +899,8 @@ source "arch/arm/mach-ixp2000/Kconfig"
 
 source "arch/arm/mach-ixp23xx/Kconfig"
 
+source "arch/arm/mach-lf1000/Kconfig"
+
 source "arch/arm/mach-kirkwood/Kconfig"
 
 source "arch/arm/mach-ks8695/Kconfig"
@@ -987,6 +1002,9 @@ config PLAT_ORION
 	bool
 
 config PLAT_PXA
+	bool
+
+config PLAT_MES
 	bool
 
 config PLAT_VERSATILE

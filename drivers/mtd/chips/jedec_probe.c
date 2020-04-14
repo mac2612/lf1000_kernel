@@ -115,6 +115,7 @@
 #define UPD29F064115	0x221C
 
 /* PMC */
+#define	PM39LV040	0x003E
 #define PM49FL002	0x006D
 #define PM49FL004	0x006E
 #define PM49FL008	0x006A
@@ -176,6 +177,7 @@
 /* Winbond */
 #define W49V002A	0x00b0
 
+#define	FLASH_TIDA	150	// generic flash command delay time in ns
 
 /*
  * Unlock address sets for AMD command sets.
@@ -1261,6 +1263,19 @@ static const struct amd_flash_info jedec_table[] = {
 		}
 	}, {
 		.mfr_id		= CFI_MFR_PMC,
+		.dev_id		= PM39LV040,
+		.name		= "PMC Pm39LV040",
+		.devtypes	= CFI_DEVICETYPE_X8,
+		.uaddr		= MTD_UADDR_0x5555_0x2AAA,
+		.dev_size	= SIZE_512KiB,
+		.cmd_set	= P_ID_AMD_STD,
+		.nr_regions	= 1,
+		.regions	= {
+			ERASEINFO( 0x01000, 128 )
+		}
+	}, {
+		.mfr_id		= CFI_MFR_PMC,
+
 		.dev_id		= PM49FL002,
 		.name		= "PMC Pm49FL002",
 		.devtypes	= CFI_DEVICETYPE_X8,
@@ -1925,13 +1940,16 @@ static void jedec_reset(u32 base, struct map_info *map, struct cfi_private *cfi)
 	}
 
 	cfi_send_gen_cmd(0xF0, cfi->addr_unlock1, base, map, cfi, cfi->device_type, NULL);
+	ndelay(FLASH_TIDA);	// delay before continuing
 	/* Some misdesigned Intel chips do not respond for 0xF0 for a reset,
 	 * so ensure we're in read mode.  Send both the Intel and the AMD command
 	 * for this.  Intel uses 0xff for this, AMD uses 0xff for NOP, so
 	 * this should be safe.
 	 */
+#if 0
 	cfi_send_gen_cmd(0xFF, 0, base, map, cfi, cfi->device_type, NULL);
-	/* FIXME - should have reset delay before continuing */
+	ndelay(FLASH_TIDA);	// delay before continuing
+#endif
 }
 
 
@@ -2109,7 +2127,7 @@ static inline int jedec_match( uint32_t base,
 		cfi_send_gen_cmd(0x55, cfi->addr_unlock2, base, map, cfi, cfi->device_type, NULL);
 	}
 	cfi_send_gen_cmd(0x90, cfi->addr_unlock1, base, map, cfi, cfi->device_type, NULL);
-	/* FIXME - should have a delay before continuing */
+	ndelay(FLASH_TIDA);	// delay before continuing
 
  match_done:
 	return rc;
@@ -2158,7 +2176,7 @@ static int jedec_probe_chip(struct map_info *map, __u32 base,
 		cfi_send_gen_cmd(0x55, cfi->addr_unlock2, base, map, cfi, cfi->device_type, NULL);
 	}
 	cfi_send_gen_cmd(0x90, cfi->addr_unlock1, base, map, cfi, cfi->device_type, NULL);
-	/* FIXME - should have a delay before continuing */
+	ndelay(FLASH_TIDA);	// delay before continuing
 
 	if (!cfi->numchips) {
 		/* This is the first time we're called. Set up the CFI
@@ -2242,8 +2260,8 @@ ok_out:
 	jedec_reset(base, map, cfi);
 
 	printk(KERN_INFO "%s: Found %d x%d devices at 0x%x in %d-bit bank\n",
-	       map->name, cfi_interleave(cfi), cfi->device_type*8, base,
-	       map->bankwidth*8);
+	       map->name, cfi_interleave(cfi), cfi->device_type*8,
+	       map->phys + base, map->bankwidth*8);
 
 	return 1;
 }

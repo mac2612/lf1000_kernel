@@ -1207,7 +1207,13 @@ static int __init ubi_init(void)
 		mtd = open_mtd_device(p->name);
 		if (IS_ERR(mtd)) {
 			err = PTR_ERR(mtd);
+#ifdef CONFIG_ARCH_LF1000
+			ubi_err("Failed to find MTD device %s.  Skipping.",
+				p->name);
+			continue;
+#else
 			goto out_detach;
+#endif
 		}
 
 		mutex_lock(&ubi_devices_mutex);

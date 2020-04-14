@@ -580,6 +580,7 @@ struct uvc_buffer *uvc_queue_next_buffer(struct uvc_video_queue *queue,
 		buf->error = 0;
 		buf->state = UVC_BUF_STATE_QUEUED;
 		buf->buf.bytesused = 0;
+		buf->error = 0;
 		return buf;
 	}
 

@@ -33,7 +33,7 @@ static int pause_on_oops;
 static int pause_on_oops_flag;
 static DEFINE_SPINLOCK(pause_on_oops_lock);
 
-int panic_timeout;
+int panic_timeout = 1;
 
 ATOMIC_NOTIFIER_HEAD(panic_notifier_list);
 
@@ -79,6 +79,14 @@ NORET_TYPE void panic(const char * fmt, ...)
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	dump_stack();
 #endif
+
+	/* Bump panic counter */
+	extern int gpio_get_panic_config();
+	extern void gpio_set_panic_config(int value);
+	i = 1 + gpio_get_panic_config();
+	if (i > 3)
+		i = 3;
+	gpio_set_panic_config(i);
 
 	/*
 	 * If we have crashed and we have a crash kernel loaded let it handle

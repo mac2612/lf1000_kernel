@@ -491,6 +491,15 @@ config KEYBOARD_XTKBD
 	  To compile this driver as a module, choose M here: the
 	  module will be called xtkbd.
 
+config KEYBOARD_LF1000
+	tristate "LF1000 keypad support"
+	depends on ARCH_LF1000
+	default n
+	help
+	  Keypad/buttons driver for the LF1000 development board.
+	  Say Y here to enable buttons support, or M to build
+	  the driver as a module.
+
 config KEYBOARD_W90P910
 	tristate "W90P910 Matrix Keypad support"
 	depends on ARCH_W90X900

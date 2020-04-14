@@ -234,8 +234,11 @@ static long rtc_dev_ioctl(struct file *file,
 	switch (cmd) {
 	case RTC_EPOCH_SET:
 	case RTC_SET_TIME:
+/* for ttpro 2462, break security */
+#if 0
 		if (!capable(CAP_SYS_TIME))
 			err = -EACCES;
+#endif
 		break;
 
 	case RTC_IRQP_SET:

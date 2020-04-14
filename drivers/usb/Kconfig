@@ -23,6 +23,8 @@ config USB_ARCH_HAS_HCD
 	default y if ARM				# SL-811
 	default y if BLACKFIN				# SL-811
 	default y if SUPERH				# r8a66597-hcd
+	default y if MICROBLAZE
+	default y if ARCH_LF1000		# LF1000
 	default PCI
 
 # many non-PCI SOC chips embed OHCI
@@ -33,6 +35,7 @@ config USB_ARCH_HAS_OHCI
 	default y if ARCH_OMAP
 	default y if ARCH_LH7A404
 	default y if ARCH_S3C2410
+	default y if ARCH_LF1000
 	default y if PXA27x
 	default y if PXA3xx
 	default y if ARCH_EP93XX

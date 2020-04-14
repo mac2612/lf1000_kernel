@@ -67,3 +67,15 @@ config MMC_TEST
 
 	  This driver is only of interest to those developing or
 	  testing a host driver. Most people should say N here.
+
+config SM2683LT
+	tristate "Silicon Motion SM2683LT programming driver"
+	default n
+	help
+	  Say Y here to enable the SM2683LT programming driver support.
+	  This provides a simple device driver which you can use to program
+	  the SD controller's firmware onto the attached NAND.  This
+	  requires a corresponding userspace utility and firmware binaries.
+
+	  The MMC block device driver cannot be used simultaneously with this
+	  driver.

@@ -91,6 +91,8 @@
  *					backing storage
  *	serial=HHHH...		Required serial number (string of hex chars)
  *	ro=b[,b...]		Default false, booleans for read-only access
+ *	locked=b[,b...]		Default false, per lun booleans for lock status
+ *	enabled=b[,b...]	Default false, per lun booleans for enabling LUNs
  *	removable		Default false, boolean for removable media
  *	luns=N			Default N = number of filenames, number of
  *					LUNs to support
@@ -228,8 +230,9 @@
  * of the Gadget, USB Mass Storage, and SCSI protocols.
  */
 
+#define USE_LEAPFROG_USB_DATA
 
-/* #define VERBOSE_DEBUG */
+#define VERBOSE_DEBUG
 /* #define DUMP_MSGS */
 
 
@@ -254,9 +257,12 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 
+#include <linux/rtc.h>
+
+#include <mach/power.h>
 #include "gadget_chips.h"
 
-
+extern enum lf1000_power_status lf1000_get_battery_status(void);
 
 /*
  * Kbuild is not very cooperative with respect to linking separately
@@ -271,8 +277,22 @@
 
 /*-------------------------------------------------------------------------*/
 
+#ifdef USE_LEAPFROG_USB_DATA
+#define DRIVER_DESC		"Leapfrog Mass Storage"
+#define DRIVER_NAME		"g_file_storage"
+#define DRIVER_VERSION		"0.9"
+#else
 #define DRIVER_DESC		"File-backed Storage Gadget"
 #define DRIVER_NAME		"g_file_storage"
+<<<<<<< HEAD
+/* DRIVER_VERSION must be at least 6 characters long, as it is used
+ * to generate a fallback serial number. */
+#define DRIVER_VERSION		"20 November 2008"
+#endif
+
+static const char longname[] = DRIVER_DESC;
+static const char shortname[] = DRIVER_NAME;
+=======
 #define DRIVER_VERSION		"1 September 2010"
 
 static       char fsg_string_manufacturer[64];
@@ -283,10 +303,27 @@ static const char fsg_string_interface[] = "Mass Storage";
 
 #include "storage_common.c"
 
+>>>>>>> v2.6.37
 
 MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_AUTHOR("Alan Stern");
 MODULE_LICENSE("Dual BSD/GPL");
+
+#ifdef USE_LEAPFROG_USB_DATA
+#define DRIVER_VENDOR_ID	0x0f63	// Leap Frog VID
+#define DRIVER_PRODUCT_ID	0x0800	// Lightning
+static char vendor_id[] = "LeapFrog";
+static char product_id[] = "Didj            ";
+#else
+/* Thanks to NetChip Technologies for donating this product ID.
+ *
+ * DO NOT REUSE THESE IDs with any other driver!!  Ever!!
+ * Instead:  allocate your own, using normal USB-IF procedures. */
+#define DRIVER_VENDOR_ID	0x0525	// NetChip
+#define DRIVER_PRODUCT_ID	0xa4a5	// Linux-USB File-backed Storage Gadget
+static char vendor_id[] = "Linux   ";
+static char product_id[] = "File-Stor Gadget";
+#endif
 
 /*
  * This driver assumes self-powered hardware and has no way for users to
@@ -309,6 +346,10 @@ static struct {
 	unsigned int	num_ros;
 	unsigned int	num_nofuas;
 	unsigned int	nluns;
+	int		locked[MAX_LUNS];
+	int		enabled[MAX_LUNS];
+	int		num_locks;
+	int		num_enables;
 
 	int		removable;
 	int		can_stall;
@@ -325,7 +366,15 @@ static struct {
 	char		*transport_name;
 	int		protocol_type;
 	char		*protocol_name;
-
+	/* The CBI specification limits the serial string to 12 uppercase
+ 	 * hexadecimal characters. */
+	/* NOTE: Leapfrog serial number is 16 hex digits.  We're using BBB, so
+	 * this should be okay.  But if you turn on CBI and things stop working,
+	 * this is * probably why!
+	 */
+	char serial[17];
+	int		needs_repair[MAX_LUNS];
+	int		num_needs_repair;
 } mod_data = {					// Default values
 	.transport_parm		= "BBB",
 	.protocol_parm		= "SCSI",
@@ -336,7 +385,11 @@ static struct {
 	.product		= FSG_PRODUCT_ID,
 	.release		= 0xffff,	// Use controller chip type
 	.buflen			= 16384,
+	.serial			= "0000000000000000"
 	};
+
+module_param_named(cdrom, mod_data.cdrom, bool, S_IRUGO);
+MODULE_PARM_DESC(cdrom, "true to emulate cdrom instead of disk");
 
 
 module_param_array_named(file, mod_data.file, charp, &mod_data.num_filenames,
@@ -362,8 +415,8 @@ MODULE_PARM_DESC(removable, "true to simulate removable media");
 module_param_named(stall, mod_data.can_stall, bool, S_IRUGO);
 MODULE_PARM_DESC(stall, "false to prevent bulk stalls");
 
-module_param_named(cdrom, mod_data.cdrom, bool, S_IRUGO);
-MODULE_PARM_DESC(cdrom, "true to emulate cdrom instead of disk");
+module_param_string(serial, mod_data.serial, sizeof(mod_data.serial), S_IRUGO);
+MODULE_PARM_DESC(serial, "Serial number string up to 16 ascii chars.");
 
 /* In the non-TEST version, only the module parameters listed above
  * are available. */
@@ -391,6 +444,127 @@ MODULE_PARM_DESC(buflen, "I/O buffer size");
 #endif /* CONFIG_USB_FILE_STORAGE_TEST */
 
 
+/*-------------------------------------------------------------------------*/
+
+/* SCSI device types */
+#define TYPE_DISK	0x00
+#define TYPE_CDROM	0x05
+
+/* USB protocol value = the transport method */
+#define USB_PR_CBI	0x00		// Control/Bulk/Interrupt
+#define USB_PR_CB	0x01		// Control/Bulk w/o interrupt
+#define USB_PR_BULK	0x50		// Bulk-only
+
+/* USB subclass value = the protocol encapsulation */
+#define USB_SC_RBC	0x01		// Reduced Block Commands (flash)
+#define USB_SC_8020	0x02		// SFF-8020i, MMC-2, ATAPI (CD-ROM)
+#define USB_SC_QIC	0x03		// QIC-157 (tape)
+#define USB_SC_UFI	0x04		// UFI (floppy)
+#define USB_SC_8070	0x05		// SFF-8070i (removable)
+#define USB_SC_SCSI	0x06		// Transparent SCSI
+
+/* Bulk-only data structures */
+
+/* Command Block Wrapper */
+struct bulk_cb_wrap {
+	__le32	Signature;		// Contains 'USBC'
+	u32	Tag;			// Unique per command id
+	__le32	DataTransferLength;	// Size of the data
+	u8	Flags;			// Direction in bit 7
+	u8	Lun;			// LUN (normally 0)
+	u8	Length;			// Of the CDB, <= MAX_COMMAND_SIZE
+	u8	CDB[16];		// Command Data Block
+};
+
+#define USB_BULK_CB_WRAP_LEN	31
+#define USB_BULK_CB_SIG		0x43425355	// Spells out USBC
+#define USB_BULK_IN_FLAG	0x80
+
+/* Command Status Wrapper */
+struct bulk_cs_wrap {
+	__le32	Signature;		// Should = 'USBS'
+	u32	Tag;			// Same as original command
+	__le32	Residue;		// Amount not transferred
+	u8	Status;			// See below
+};
+
+#define USB_BULK_CS_WRAP_LEN	13
+#define USB_BULK_CS_SIG		0x53425355	// Spells out 'USBS'
+#define USB_STATUS_PASS		0
+#define USB_STATUS_FAIL		1
+#define USB_STATUS_PHASE_ERROR	2
+
+/* Bulk-only class specific requests */
+#define USB_BULK_RESET_REQUEST		0xff
+#define USB_BULK_GET_MAX_LUN_REQUEST	0xfe
+
+
+/* CBI Interrupt data structure */
+struct interrupt_data {
+	u8	bType;
+	u8	bValue;
+};
+
+#define CBI_INTERRUPT_DATA_LEN		2
+
+/* CBI Accept Device-Specific Command request */
+#define USB_CBI_ADSC_REQUEST		0x00
+
+
+#define MAX_COMMAND_SIZE	16	// Length of a SCSI Command Data Block
+
+/* SCSI commands that we recognize */
+#define SC_FORMAT_UNIT			0x04
+#define SC_INQUIRY			0x12
+#define SC_MODE_SELECT_6		0x15
+#define SC_MODE_SELECT_10		0x55
+#define SC_MODE_SENSE_6			0x1a
+#define SC_MODE_SENSE_10		0x5a
+#define SC_PREVENT_ALLOW_MEDIUM_REMOVAL	0x1e
+#define SC_READ_6			0x08
+#define SC_READ_10			0x28
+#define SC_READ_12			0xa8
+#define SC_READ_CAPACITY		0x25
+#define SC_READ_FORMAT_CAPACITIES	0x23
+#define SC_READ_HEADER			0x44
+#define SC_READ_TOC			0x43
+#define SC_RELEASE			0x17
+#define SC_REQUEST_SENSE		0x03
+#define SC_RESERVE			0x16
+#define SC_SEND_DIAGNOSTIC		0x1d
+#define SC_START_STOP_UNIT		0x1b
+#define SC_SYNCHRONIZE_CACHE		0x35
+#define SC_TEST_UNIT_READY		0x00
+#define SC_VERIFY			0x2f
+#define SC_WRITE_6			0x0a
+#define SC_WRITE_10			0x2a
+#define SC_WRITE_12			0xaa
+#define SC_VENDOR_DEFINED_BEGIN		0xc0
+#define SC_VENDOR_DEFINED_END		0xff
+
+/* SCSI Sense Key/Additional Sense Code/ASC Qualifier values */
+#define SS_NO_SENSE				0
+#define SS_COMMUNICATION_FAILURE		0x040800
+#define SS_INVALID_COMMAND			0x052000
+#define SS_INVALID_FIELD_IN_CDB			0x052400
+#define SS_LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE	0x052100
+#define SS_LOGICAL_UNIT_NOT_SUPPORTED		0x052500
+#define SS_MEDIUM_NOT_PRESENT			0x023a00
+#define SS_MEDIUM_REMOVAL_PREVENTED		0x055302
+#define SS_NOT_READY_TO_READY_TRANSITION	0x062800
+#define SS_RESET_OCCURRED			0x062900
+#define SS_SAVING_PARAMETERS_NOT_SUPPORTED	0x053900
+#define SS_UNRECOVERED_READ_ERROR		0x031100
+#define SS_WRITE_ERROR				0x030c02
+#define SS_WRITE_PROTECTED			0x072700
+
+#define SK(x)		((u8) ((x) >> 16))	// Sense Key byte, etc.
+#define ASC(x)		((u8) ((x) >> 8))
+#define ASCQ(x)		((u8) (x))
+
+
+/*-------------------------------------------------------------------------*/
+
 /*
  * These definitions will permit the compiler to avoid generating code for
  * parts of the driver that aren't used in the non-TEST version.  Even gcc
@@ -412,9 +586,96 @@ MODULE_PARM_DESC(buflen, "I/O buffer size");
 
 #endif /* CONFIG_USB_FILE_STORAGE_TEST */
 
+#define MAX_FNAME_LEN 256
+struct lun {
+	char		fname[MAX_FNAME_LEN];
+	struct file	*filp;
+	loff_t		file_length;
+	loff_t		num_sectors;
 
-/*-------------------------------------------------------------------------*/
+	unsigned int	ro : 1;
+	unsigned int	prevent_medium_removal : 1;
+	unsigned int	registered : 1;
+	unsigned int	info_valid : 1;
 
+	u32		sense_data;
+	u32		sense_data_info;
+	u32		unit_attention_data;
+
+	struct device	dev;
+
+	/* Each LUN can be locked or unlocked.  If it is locked, it's not
+	 * visible over USB.  This is meant to be controlled using custom scsi
+	 * commands, but it can also be controlled at load time or runtime.
+	 */
+	int		locked;
+	/* Each LUN can be enabled or disabled.  This is just like locked, but
+	 * it is meant to be controlled by the device at runtime.
+	 */
+	int		enabled;
+	/* Each LUN can have its file system marked as needing repair */
+	int		needs_repair;
+};
+
+#define backing_file_is_open(curlun)	((curlun)->filp != NULL)
+
+static struct lun *dev_to_lun(struct device *dev)
+{
+	return container_of(dev, struct lun, dev);
+}
+
+
+/* Big enough to hold our biggest descriptor */
+#define EP0_BUFSIZE	256
+#define DELAYED_STATUS	(EP0_BUFSIZE + 999)	// An impossibly large value
+
+/* Number of buffers we will use.  2 is enough for double-buffering */
+#define NUM_BUFFERS	2
+
+enum fsg_buffer_state {
+	BUF_STATE_EMPTY = 0,
+	BUF_STATE_FULL,
+	BUF_STATE_BUSY
+};
+
+struct fsg_buffhd {
+	void				*buf;
+	dma_addr_t			dma;
+	enum fsg_buffer_state		state;
+	struct fsg_buffhd		*next;
+
+	/* The NetChip 2280 is faster, and handles some protocol faults
+	 * better, if we don't submit any short bulk-out read requests.
+	 * So we will record the intended request length here. */
+	unsigned int			bulk_out_intended_length;
+
+	struct usb_request		*inreq;
+	int				inreq_busy;
+	struct usb_request		*outreq;
+	int				outreq_busy;
+};
+
+enum fsg_state {
+	FSG_STATE_COMMAND_PHASE = -10,		// This one isn't used anywhere
+	FSG_STATE_DATA_PHASE,
+	FSG_STATE_STATUS_PHASE,
+
+	FSG_STATE_IDLE = 0,
+	FSG_STATE_ABORT_BULK_OUT,
+	FSG_STATE_RESET,
+	FSG_STATE_INTERFACE_CHANGE,
+	FSG_STATE_CONFIG_CHANGE,
+	FSG_STATE_DISCONNECT,
+	FSG_STATE_EXIT,
+	FSG_STATE_TERMINATED
+};
+
+enum data_direction {
+	DATA_DIR_UNKNOWN = 0,
+	DATA_DIR_FROM_HOST,
+	DATA_DIR_TO_HOST,
+	DATA_DIR_NONE
+};
 
 struct fsg_dev {
 	/* lock protects: state, all the req_busy's, and cbbuf_cmnd */
@@ -486,8 +747,10 @@ struct fsg_dev {
 	u8			cbbuf_cmnd[MAX_COMMAND_SIZE];
 
 	unsigned int		nluns;
-	struct fsg_lun		*luns;
-	struct fsg_lun		*curlun;
+	struct lun		*luns;
+	struct lun		*curlun;
+	
+	int disconnect_ok;
 };
 
 typedef void (*fsg_routine_t)(struct fsg_dev *);
@@ -513,8 +776,50 @@ static void set_bulk_out_req_length(struct fsg_dev *fsg,
 static struct fsg_dev			*the_fsg;
 static struct usb_gadget_driver		fsg_driver;
 
+static void fsync_all(struct fsg_dev *fsg);
+static int open_backing_file(struct lun *curlun, const char *filename);
+static void	close_backing_file(struct lun *curlun);
+
 
 /*-------------------------------------------------------------------------*/
+
+#ifdef DUMP_MSGS
+
+static void dump_msg(struct fsg_dev *fsg, const char *label,
+		const u8 *buf, unsigned int length)
+{
+	if (length < 512) {
+		DBG(fsg, "%s, length %u:\n", label, length);
+		print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET,
+				16, 1, buf, length, 0);
+	}
+}
+
+static void dump_cdb(struct fsg_dev *fsg)
+{}
+
+#else
+
+static void dump_msg(struct fsg_dev *fsg, const char *label,
+		const u8 *buf, unsigned int length)
+{}
+
+#ifdef VERBOSE_DEBUG
+
+static void dump_cdb(struct fsg_dev *fsg)
+{
+	print_hex_dump(KERN_DEBUG, "SCSI CDB: ", DUMP_PREFIX_NONE,
+			16, 1, fsg->cmnd, fsg->cmnd_size, 0);
+}
+
+#else
+
+static void dump_cdb(struct fsg_dev *fsg)
+{}
+
+#endif /* VERBOSE_DEBUG */
+#endif /* DUMP_MSGS */
+
 
 static int fsg_set_halt(struct fsg_dev *fsg, struct usb_ep *ep)
 {
@@ -569,12 +874,86 @@ config_desc = {
 	/* wTotalLength computed by usb_gadget_config_buf() */
 	.bNumInterfaces =	1,
 	.bConfigurationValue =	CONFIG_VALUE,
-	.iConfiguration =	FSG_STRING_CONFIG,
+	.iConfiguration =	STRING_CONFIG,
 	.bmAttributes =		USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_SELFPOWER,
-	.bMaxPower =		CONFIG_USB_GADGET_VBUS_DRAW / 2,
+	.bMaxPower =		1,	// self-powered
 };
 
+static struct usb_otg_descriptor
+otg_desc = {
+	.bLength =		sizeof(otg_desc),
+	.bDescriptorType =	USB_DT_OTG,
 
+	.bmAttributes =		USB_OTG_SRP,
+};
+
+/* There is only one interface. */
+
+static struct usb_interface_descriptor
+intf_desc = {
+	.bLength =		sizeof intf_desc,
+	.bDescriptorType =	USB_DT_INTERFACE,
+
+	.bNumEndpoints =	2,		// Adjusted during fsg_bind()
+	.bInterfaceClass =	USB_CLASS_MASS_STORAGE,
+	.bInterfaceSubClass =	USB_SC_SCSI,	// Adjusted during fsg_bind()
+	.bInterfaceProtocol =	USB_PR_BULK,	// Adjusted during fsg_bind()
+	.iInterface =		STRING_INTERFACE,
+};
+
+/* Three full-speed endpoint descriptors: bulk-in, bulk-out,
+ * and interrupt-in. */
+
+static struct usb_endpoint_descriptor
+fs_bulk_in_desc = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+
+	.bEndpointAddress =	USB_DIR_IN,
+	.bmAttributes =		USB_ENDPOINT_XFER_BULK,
+	/* wMaxPacketSize set by autoconfiguration */
+};
+
+static struct usb_endpoint_descriptor
+fs_bulk_out_desc = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+
+	.bEndpointAddress =	USB_DIR_OUT,
+	.bmAttributes =		USB_ENDPOINT_XFER_BULK,
+	/* wMaxPacketSize set by autoconfiguration */
+};
+
+static struct usb_endpoint_descriptor
+fs_intr_in_desc = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+
+	.bEndpointAddress =	USB_DIR_IN,
+	.bmAttributes =		USB_ENDPOINT_XFER_INT,
+	.wMaxPacketSize =	cpu_to_le16(2),
+	.bInterval =		32,	// frames -> 32 ms
+};
+
+static const struct usb_descriptor_header *fs_function[] = {
+	(struct usb_descriptor_header *) &otg_desc,
+	(struct usb_descriptor_header *) &intf_desc,
+	(struct usb_descriptor_header *) &fs_bulk_in_desc,
+	(struct usb_descriptor_header *) &fs_bulk_out_desc,
+	(struct usb_descriptor_header *) &fs_intr_in_desc,
+	NULL,
+};
+#define FS_FUNCTION_PRE_EP_ENTRIES	2
+
+
+/*
+ * USB 2.0 devices need to expose both high speed and full speed
+ * descriptors, unless they only run at full speed.
+ *
+ * That means alternate endpoint descriptors (bigger packets)
+ * and a "device qualifier" ... plus more construction options
+ * for the config descriptor.
+ */
 static struct usb_qualifier_descriptor
 dev_qualifier = {
 	.bLength =		sizeof dev_qualifier,
@@ -586,6 +965,79 @@ dev_qualifier = {
 	.bNumConfigurations =	1,
 };
 
+static struct usb_endpoint_descriptor
+hs_bulk_in_desc = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+
+	/* bEndpointAddress copied from fs_bulk_in_desc during fsg_bind() */
+	.bmAttributes =		USB_ENDPOINT_XFER_BULK,
+	.wMaxPacketSize =	cpu_to_le16(512),
+};
+
+static struct usb_endpoint_descriptor
+hs_bulk_out_desc = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+
+	/* bEndpointAddress copied from fs_bulk_out_desc during fsg_bind() */
+	.bmAttributes =		USB_ENDPOINT_XFER_BULK,
+	.wMaxPacketSize =	cpu_to_le16(512),
+	.bInterval =		1,	// NAK every 1 uframe
+};
+
+static struct usb_endpoint_descriptor
+hs_intr_in_desc = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+
+	/* bEndpointAddress copied from fs_intr_in_desc during fsg_bind() */
+	.bmAttributes =		USB_ENDPOINT_XFER_INT,
+	.wMaxPacketSize =	cpu_to_le16(2),
+	.bInterval =		9,	// 2**(9-1) = 256 uframes -> 32 ms
+};
+
+static const struct usb_descriptor_header *hs_function[] = {
+	(struct usb_descriptor_header *) &otg_desc,
+	(struct usb_descriptor_header *) &intf_desc,
+	(struct usb_descriptor_header *) &hs_bulk_in_desc,
+	(struct usb_descriptor_header *) &hs_bulk_out_desc,
+	(struct usb_descriptor_header *) &hs_intr_in_desc,
+	NULL,
+};
+#define HS_FUNCTION_PRE_EP_ENTRIES	2
+
+/* Maxpacket and other transfer characteristics vary by speed. */
+static struct usb_endpoint_descriptor *
+ep_desc(struct usb_gadget *g, struct usb_endpoint_descriptor *fs,
+		struct usb_endpoint_descriptor *hs)
+{
+	if (gadget_is_dualspeed(g) && g->speed == USB_SPEED_HIGH)
+		return hs;
+	return fs;
+}
+
+
+/* The CBI specification limits the serial string to 12 uppercase hexadecimal
+ * characters. */
+static char				manufacturer[64];
+static char			serial_no_null[sizeof(mod_data.serial)-1];
+static int			serial_len;
+
+/* Static strings, in UTF-8 (for simplicity we use only ASCII characters) */
+static struct usb_string		strings[] = {
+	{STRING_MANUFACTURER,	manufacturer},
+	{STRING_PRODUCT,	longname},
+	{STRING_SERIAL,		serial_no_null},
+	{STRING_CONFIG,		"Self-powered"},
+	{STRING_INTERFACE,	"Mass Storage"},
+	{}
+};
+
+static struct usb_gadget_strings	stringtab = {
+	.language	= 0x0409,		// en-us
+	.strings	= strings,
+};
 
 
 /*
@@ -1264,9 +1716,8 @@ static int do_write(struct fsg_dev *fsg)
 		curlun->sense_data = SS_WRITE_PROTECTED;
 		return -EINVAL;
 	}
-	spin_lock(&curlun->filp->f_lock);
-	curlun->filp->f_flags &= ~O_SYNC;	// Default is not to wait
-	spin_unlock(&curlun->filp->f_lock);
+	//curlun->filp->f_flags &= ~O_SYNC;	// Default is not to wait
+	curlun->filp->f_flags |= O_SYNC;	// The medium is shared, so we sync
 
 	/* Get the starting Logical Block Address and check that it's
 	 * not too big */
@@ -1434,6 +1885,276 @@ static int do_write(struct fsg_dev *fsg)
 	return -EIO;		// No default reply
 }
 
+/*-------------------------------------------------------------------------*/
+
+/*
+ * These are leapfrog specific functions.  They should be migrated to another
+ * module and registered somehow with this module to provide custom vendor
+ * commands.  This fanciness will have to be implemented at some other time.
+ * Also, it only works on little endian machines!  I know.  Sinful.
+ */
+#define LF_LOCK_DEVICE 0xC1
+#define LF_UNLOCK_DEVICE 0xC2
+#define LF_GET_SETTING 0xC3
+#define LF_SET_SETTING 0xC4
+#define LF_DISCONNECT_OK 0xC6
+
+/* Now for some settings that we can get */
+#define LF_RTC_COUNTER 1
+#define LF_BATTERY_LEVEL 2
+#define LF_SERIAL_NUMBER 3
+#define LF_NEEDS_REPAIR	6
+
+struct custom_cmd {
+	unsigned char opcode;
+	unsigned char setting; /* only used for kDeviceCmdGetSetting */
+	unsigned char unused[8];
+} __attribute__((packed));
+
+struct rtc_reply {
+	unsigned long value;
+} __attribute__((packed));
+
+struct battery_reply {
+	unsigned char value;
+} __attribute__((packed));
+
+struct st_needs_repair {
+	unsigned char value;
+} __attribute__((packed));
+
+/* values for battery levels */
+#define BATT_UNKNOWN 0
+#define BATT_CRITICAL 1
+#define BATT_LOW 2
+#define BATT_GOOD 3
+#define BATT_FULL 4
+
+/*
+ * get the battery status from the hwmon and convert it for user app
+ */
+unsigned char get_battery_value(void)
+{
+	enum lf1000_power_status s = lf1000_get_battery_status();
+
+	switch(s) {
+		case CRITICAL_BATTERY:	return BATT_CRITICAL;
+		case LOW_BATTERY:	return BATT_LOW;
+		case NIMH:
+		case BATTERY:		return BATT_GOOD;
+		case NIMH_CHARGER:
+		case EXTERNAL:		return BATT_FULL;
+		case UNKNOWN:		return BATT_UNKNOWN;
+	}
+	return BATT_UNKNOWN;
+}
+
+static int do_vendor_command(struct fsg_dev *fsg, struct fsg_buffhd *bh)
+{
+	int ret = 0, i;
+	u8 *buf = (u8 *)bh->buf;
+	struct rtc_reply rtcr;
+	struct battery_reply batr;
+	struct st_needs_repair repair;
+	struct custom_cmd *cc = (struct custom_cmd *)&fsg->cmnd[0];
+	struct lun *curlun;
+	struct rtc_time tm;
+	struct rtc_device *rtc_dev;
+
+	switch(fsg->cmnd[0]) {
+	case LF_LOCK_DEVICE:
+		/* This should be per lun, but the command is not defined that
+		 * way.  Lame. 
+		 */
+		fsync_all(fsg);
+		for(i=0; i<fsg->nluns; i++) {
+			curlun = &fsg->luns[i];
+			if(curlun->locked)
+				continue;
+			
+			up_read(&fsg->filesem);
+			down_write(&fsg->filesem);
+
+			/* Eject current medium thus locking device */
+			if (backing_file_is_open(curlun)) {
+				close_backing_file(curlun);
+				curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
+			}
+			
+			curlun->locked = 1;
+			up_write(&fsg->filesem);
+			down_read(&fsg->filesem);
+		}
+		break;
+	case LF_UNLOCK_DEVICE:
+		for(i=0; i<fsg->nluns; i++) {
+			curlun = &fsg->luns[i];
+			if(!curlun->locked)
+				continue;
+
+			up_read(&fsg->filesem);
+			down_write(&fsg->filesem);
+			if (curlun->fname[0] && curlun->enabled) {
+				ret = open_backing_file(curlun, curlun->fname);
+				if (ret == 0)
+					curlun->unit_attention_data =
+						SS_NOT_READY_TO_READY_TRANSITION;
+			}
+			if (ret == 0)
+				curlun->locked = 0;
+			up_write(&fsg->filesem);
+			down_read(&fsg->filesem);
+			if (ret != 0)
+				break;
+		}
+		break;
+	case LF_GET_SETTING:
+		switch (cc->setting) {
+		case LF_BATTERY_LEVEL:
+			batr.value = get_battery_value();
+			memcpy(&buf[0], &batr, sizeof(struct battery_reply));
+			ret = sizeof(struct battery_reply);
+			break;
+
+		case LF_RTC_COUNTER:
+			rtcr.value = 0xFFFFFFFF;
+			rtc_dev = rtc_class_open("rtc0");
+			if(!rtc_dev) {
+				printk("failed to open rtc\n");
+			} else {
+				if(rtc_read_time(rtc_dev, &tm) != 0)
+					printk("failed to read time.\n");
+				else
+					rtc_tm_to_time(&tm, &rtcr.value);
+				rtc_class_close(rtc_dev);
+			}
+			memcpy(&buf[0], &rtcr, sizeof(struct rtc_reply));
+			ret = sizeof(struct rtc_reply);
+			break;
+		case LF_SERIAL_NUMBER:
+			memcpy(&buf[0], serial_no_null, serial_len);
+			buf[serial_len] = 0;
+			ret = serial_len + 1;
+			break;
+		case LF_NEEDS_REPAIR:
+		/* This should be per lun, but the command is not 
+		 * defined that way.
+		 */
+			repair.value=0;	// assume repair not needed
+			for(i=0; i<fsg->nluns; i++) {
+				curlun = &fsg->luns[i];
+				if(curlun->needs_repair) {
+					repair.value=1;
+					break;
+				}
+			}
+					
+			memcpy(&buf[0], &repair, sizeof(repair));
+			ret = sizeof(repair);
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case LF_SET_SETTING:
+		switch (cc->setting) {
+		case LF_NEEDS_REPAIR:
+			memcpy(&repair, &(fsg->cmnd[2]), sizeof(repair));
+			for(i=0; i<fsg->nluns; i++) {
+				curlun = &fsg->luns[i];
+				curlun->needs_repair=repair.value;
+			}
+			ret = sizeof(repair);
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case LF_DISCONNECT_OK:
+		fsg->disconnect_ok = 1;
+		ret = 0;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return ret;
+}
+
+static int check_vendor_command(struct fsg_dev *fsg)
+{
+	struct lun *curlun;
+	int i;
+	struct custom_cmd *cc = (struct custom_cmd *)&fsg->cmnd[0];
+
+	switch(fsg->cmnd[0]) {
+	case LF_LOCK_DEVICE:
+		if(fsg->data_dir != DATA_DIR_NONE)
+			return -EINVAL;
+		fsg->data_size_from_cmnd = 0;
+		for(i=0; i<fsg->nluns; i++) {
+			curlun = &fsg->luns[i];
+			if(curlun->locked)
+				continue;
+			
+			if (curlun->prevent_medium_removal &&
+			    backing_file_is_open(curlun)) {
+				LDBG(curlun, "eject attempt prevented\n");
+				return -EBUSY;
+			}
+		}
+		break;
+	case LF_UNLOCK_DEVICE:
+		if(fsg->data_dir != DATA_DIR_NONE)
+			return -EINVAL;
+		fsg->data_size_from_cmnd = 0;
+		break;
+	case LF_GET_SETTING:
+		if(fsg->data_dir != DATA_DIR_TO_HOST)
+			return -EINVAL;
+		switch (cc->setting) {
+		case LF_BATTERY_LEVEL:
+			fsg->data_size_from_cmnd = sizeof(struct battery_reply);
+			break;
+
+		case LF_RTC_COUNTER:
+			fsg->data_size_from_cmnd = sizeof(struct rtc_reply);
+			break;
+
+		case LF_SERIAL_NUMBER:
+			fsg->data_size_from_cmnd = 256;
+			break;
+
+		case LF_NEEDS_REPAIR:
+			fsg->data_size_from_cmnd =
+				sizeof(struct st_needs_repair);
+			break;
+			
+		default:
+			return -EINVAL;
+		}
+		break;
+	case LF_SET_SETTING:
+		if(fsg->data_dir != DATA_DIR_FROM_HOST)
+			return -EINVAL;
+		switch (cc->setting) {
+		case LF_NEEDS_REPAIR:
+			fsg->data_size_from_cmnd =
+				sizeof(struct st_needs_repair);
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case LF_DISCONNECT_OK:
+		if(fsg->data_dir != DATA_DIR_NONE)
+			return -EINVAL;
+		fsg->data_size_from_cmnd = 0;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
 
 /*-------------------------------------------------------------------------*/
 
@@ -1565,15 +2286,11 @@ static int do_inquiry(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 {
 	u8	*buf = (u8 *) bh->buf;
 
-	static char vendor_id[] = "Linux   ";
-	static char product_disk_id[] = "File-Stor Gadget";
-	static char product_cdrom_id[] = "File-CD Gadget  ";
 
 	if (!fsg->curlun) {		// Unsupported LUNs are okay
 		fsg->bad_lun_okay = 1;
 		memset(buf, 0, 36);
 		buf[0] = 0x7f;		// Unsupported, no device-type
-		buf[4] = 31;		// Additional length
 		return 36;
 	}
 
@@ -1585,9 +2302,7 @@ static int do_inquiry(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 	buf[3] = 2;		// SCSI-2 INQUIRY data format
 	buf[4] = 31;		// Additional length
 				// No special options
-	sprintf(buf + 8, "%-8s%-16s%04x", vendor_id,
-			(mod_data.cdrom ? product_cdrom_id :
-				product_disk_id),
+	sprintf(buf + 8, "%-8s%-16s%04x", vendor_id, product_id,
 			mod_data.release);
 	return 36;
 }
@@ -2205,6 +2920,7 @@ static int send_status(struct fsg_dev *fsg)
 
 		fsg->intr_buffhd = bh;		// Point to the right buffhd
 		fsg->intreq->buf = bh->inreq->buf;
+		fsg->intreq->dma = bh->inreq->dma;
 		fsg->intreq->context = bh;
 		start_transfer(fsg, fsg->intr_in, fsg->intreq,
 				&fsg->intreq_busy, &bh->state);
@@ -2579,12 +3295,22 @@ static int do_scsi_command(struct fsg_dev *fsg)
 
 	default:
  unknown_cmnd:
-		fsg->data_size_from_cmnd = 0;
-		sprintf(unknown, "Unknown x%02x", fsg->cmnd[0]);
-		if ((reply = check_command(fsg, fsg->cmnd_size,
-				DATA_DIR_UNKNOWN, 0xff, 0, unknown)) == 0) {
-			fsg->curlun->sense_data = SS_INVALID_COMMAND;
-			reply = -EINVAL;
+		/* Vendor specific commands should probably use a registration
+		 * mechanism.  But for now we do it all in this file.
+		 */
+		if((fsg->cmnd[0] >= SC_VENDOR_DEFINED_BEGIN) &&
+		   ((reply = check_vendor_command(fsg)) == 0) &&
+		   (check_command(fsg, 10, fsg->data_dir, 0xff, 0, "VENDOR") == 0)) {
+			reply = do_vendor_command(fsg, bh);
+		} else {
+			fsg->data_size_from_cmnd = 0;
+			sprintf(unknown, "Unknown x%02x", fsg->cmnd[0]);
+			if ((reply = check_command(fsg, fsg->cmnd_size,
+						   DATA_DIR_UNKNOWN, 0xff,
+						   0, unknown)) == 0) {
+				fsg->curlun->sense_data = SS_INVALID_COMMAND;
+				reply = -EINVAL;
+			}
 		}
 		break;
 	}
@@ -2843,6 +3569,7 @@ reset:
 		if ((rc = alloc_request(fsg, fsg->bulk_out, &bh->outreq)) != 0)
 			goto reset;
 		bh->inreq->buf = bh->outreq->buf = bh->buf;
+		bh->inreq->dma = bh->outreq->dma = bh->dma;
 		bh->inreq->context = bh->outreq->context = bh;
 		bh->inreq->complete = bulk_in_complete;
 		bh->outreq->complete = bulk_out_complete;
@@ -3135,12 +3862,64 @@ static int fsg_main_thread(void *fsg_)
 
 /*-------------------------------------------------------------------------*/
 
+/* If the next two routines are called while the gadget is registered,
+ * the caller must own fsg->filesem for writing. */
 
 /* The write permissions and store_xxx pointers are set in fsg_bind() */
 static DEVICE_ATTR(ro, 0444, fsg_show_ro, NULL);
 static DEVICE_ATTR(nofua, 0644, fsg_show_nofua, NULL);
 static DEVICE_ATTR(file, 0444, fsg_show_file, NULL);
 
+	/* Eject current medium */
+	down_write(&fsg->filesem);
+	if (enableme) {
+		if(curlun->fname[0] == 0) {
+			/* we can't enable unless there's a filename */
+			rc = -EINVAL;
+		} else {
+			/* enable LUN */
+			if (!curlun->locked) {
+				rc = open_backing_file(curlun, curlun->fname);
+				if (rc == 0)
+					curlun->unit_attention_data =
+						SS_NOT_READY_TO_READY_TRANSITION;
+			}
+		}
+	} else {
+		/* Eject current medium thus disabling device */
+		if (backing_file_is_open(curlun)) {
+			fsync_sub(curlun);
+			close_backing_file(curlun);
+			curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
+		}
+	}
+	curlun->enabled = enableme;
+	up_write(&fsg->filesem);
+	return (rc < 0 ? rc : count);
+}
+
+static ssize_t store_needs_repair(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct lun	*curlun = dev_to_lun(dev);
+	int		needs_repair;
+	
+	if (sscanf(buf, "%d", &needs_repair) != 1)
+		return -EINVAL;
+	
+	needs_repair = !!needs_repair;
+
+	curlun->needs_repair = needs_repair;
+	return count;
+}
+
+/* The write permissions and store_xxx pointers are set in fsg_bind() */
+static DEVICE_ATTR(ro, 0444, show_ro, NULL);
+static DEVICE_ATTR(file, 0444, show_file, NULL);
+static DEVICE_ATTR(locked, 0644, show_locked, store_locked);
+static DEVICE_ATTR(enabled, 0644, show_enabled, store_enabled);
+static DEVICE_ATTR(disconnect, 0444, show_disconnect, NULL);
+static DEVICE_ATTR(needs_repair, 0644, show_needs_repair, store_needs_repair);
 
 /*-------------------------------------------------------------------------*/
 
@@ -3172,15 +3951,19 @@ static void /* __init_or_exit */ fsg_unbind(struct usb_gadget *gadget)
 	clear_bit(REGISTERED, &fsg->atomic_bitflags);
 
 	/* Unregister the sysfs attribute files and the LUNs */
+	device_remove_file(&gadget->dev, &dev_attr_disconnect);
 	for (i = 0; i < fsg->nluns; ++i) {
 		curlun = &fsg->luns[i];
 		if (curlun->registered) {
 			device_remove_file(&curlun->dev, &dev_attr_nofua);
 			device_remove_file(&curlun->dev, &dev_attr_ro);
 			device_remove_file(&curlun->dev, &dev_attr_file);
-			fsg_lun_close(curlun);
+			device_remove_file(&gadget->dev, &dev_attr_locked);
+			device_remove_file(&gadget->dev, &dev_attr_enabled);
+			device_remove_file(&gadget->dev, &dev_attr_needs_repair);
 			device_unregister(&curlun->dev);
 			curlun->registered = 0;
+			curlun->fname[0] = 0;
 		}
 	}
 
@@ -3346,6 +4129,8 @@ static int __init fsg_bind(struct usb_gadget *gadget)
 	if ((rc = check_parameters(fsg)) != 0)
 		goto out;
 
+	fsg->disconnect_ok = 1;
+
 	if (mod_data.removable) {	// Enable the store_xxx attributes
 		dev_attr_file.attr.mode = 0644;
 		dev_attr_file.store = fsg_store_file;
@@ -3377,6 +4162,9 @@ static int __init fsg_bind(struct usb_gadget *gadget)
 		goto out;
 	}
 	fsg->nluns = i;
+	if ((rc = device_create_file(&gadget->dev,
+				     &dev_attr_disconnect)) != 0)
+		goto out;
 
 	for (i = 0; i < fsg->nluns; ++i) {
 		curlun = &fsg->luns[i];
@@ -3388,7 +4176,7 @@ static int __init fsg_bind(struct usb_gadget *gadget)
 		curlun->dev.release = lun_release;
 		curlun->dev.parent = &gadget->dev;
 		curlun->dev.driver = &fsg_driver.driver;
-		dev_set_drvdata(&curlun->dev, &fsg->filesem);
+		dev_set_drvdata(&curlun->dev, fsg);
 		dev_set_name(&curlun->dev,"%s-lun%d",
 			     dev_name(&gadget->dev), i);
 
@@ -3408,14 +4196,33 @@ static int __init fsg_bind(struct usb_gadget *gadget)
 		curlun->registered = 1;
 		kref_get(&fsg->ref);
 
+		curlun->fname[0] = 0;
 		if (mod_data.file[i] && *mod_data.file[i]) {
-			if ((rc = fsg_lun_open(curlun,
-					mod_data.file[i])) != 0)
+			if (strlen(mod_data.file[i]) >= MAX_FNAME_LEN) {
+				ERROR(fsg, "Filename too long for LUN%d\n", i);
+				rc = -EINVAL;
 				goto out;
-		} else if (!mod_data.removable) {
+			} else {
+				strcpy(&curlun->fname[0], mod_data.file[i]);
+			}
+		}
+
+		if ( !(curlun->fname[0]) && (curlun->enabled) ) {
+			ERROR(fsg, "Can't enable LUN%d without file\n", i);
+			rc = -EINVAL;
+			goto out;
+		}
+		
+		if ( !(curlun->fname[0]) && !mod_data.removable ) {
 			ERROR(fsg, "no file given for LUN%d\n", i);
 			rc = -EINVAL;
 			goto out;
+		}
+
+		if (curlun->enabled && !curlun->locked) {
+			rc = open_backing_file(curlun, curlun->fname);
+			if (rc != 0)
+				goto out;
 		}
 	}
 
@@ -3494,13 +4301,12 @@ static int __init fsg_bind(struct usb_gadget *gadget)
 			goto out;
 		bh->next = bh + 1;
 	}
-	fsg->buffhds[FSG_NUM_BUFFERS - 1].next = &fsg->buffhds[0];
+	fsg->buffhds[NUM_BUFFERS - 1].next = &fsg->buffhds[0];
 
 	/* This should reflect the actual gadget power source */
 	usb_gadget_set_selfpowered(gadget);
 
-	snprintf(fsg_string_manufacturer, sizeof fsg_string_manufacturer,
-			"%s %s with %s",
+	snprintf(manufacturer, sizeof manufacturer, "%s %s with %s",
 			init_utsname()->sysname, init_utsname()->release,
 			gadget->name);
 
@@ -3578,6 +4384,11 @@ static void fsg_resume(struct usb_gadget *gadget)
 	clear_bit(SUSPENDED, &fsg->atomic_bitflags);
 }
 
+void fsg_vbus_session(struct usb_gadget *gadget, int is_active)
+{
+	struct fsg_dev		*fsg = get_gadget_data(gadget);
+	fsg->disconnect_ok = !is_active;
+}
 
 /*-------------------------------------------------------------------------*/
 
@@ -3601,6 +4412,8 @@ static struct usb_gadget_driver		fsg_driver = {
 		// .suspend = ...
 		// .resume = ...
 	},
+	.vbus_session	= fsg_vbus_session,
+	.is_enabled	= fsg_enabled,
 };
 
 
@@ -3626,6 +4439,8 @@ static int __init fsg_init(void)
 	int		rc;
 	struct fsg_dev	*fsg;
 
+	if(mod_data.product == 0x1300)
+		strcpy(product_id, "LeapsterAdvance");
 	if ((rc = fsg_alloc()) != 0)
 		return rc;
 	fsg = the_fsg;

@@ -19,7 +19,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-/* #define VERBOSE_DEBUG */
+#define VERBOSE_DEBUG
 
 #include <linux/slab.h>
 #include <linux/kernel.h>
@@ -27,7 +27,6 @@
 #include <linux/etherdevice.h>
 
 #include "u_ether.h"
-
 
 /*
  * This function is a "CDC Ethernet Networking Control Model" (CDC ECM)
@@ -119,7 +118,11 @@ static struct usb_interface_descriptor ecm_control_intf = {
 
 	/* .bInterfaceNumber = DYNAMIC */
 	/* status endpoint is optional; this could be patched later */
+#ifndef CPU_LF1000
 	.bNumEndpoints =	1,
+#else
+	.bNumEndpoints =	0,
+#endif
 	.bInterfaceClass =	USB_CLASS_COMM,
 	.bInterfaceSubClass =	USB_CDC_SUBCLASS_ETHERNET,
 	.bInterfaceProtocol =	USB_CDC_PROTO_NONE,
@@ -220,7 +223,9 @@ static struct usb_descriptor_header *ecm_fs_function[] = {
 	(struct usb_descriptor_header *) &ecm_union_desc,
 	(struct usb_descriptor_header *) &ecm_desc,
 	/* NOTE: status endpoint might need to be removed */
+#ifndef CPU_LF1000
 	(struct usb_descriptor_header *) &fs_ecm_notify_desc,
+#endif
 	/* data interface, altsettings 0 and 1 */
 	(struct usb_descriptor_header *) &ecm_data_nop_intf,
 	(struct usb_descriptor_header *) &ecm_data_intf,
@@ -265,7 +270,9 @@ static struct usb_descriptor_header *ecm_hs_function[] = {
 	(struct usb_descriptor_header *) &ecm_union_desc,
 	(struct usb_descriptor_header *) &ecm_desc,
 	/* NOTE: status endpoint might need to be removed */
+#ifndef CPU_LF1000
 	(struct usb_descriptor_header *) &hs_ecm_notify_desc,
+#endif
 	/* data interface, altsettings 0 and 1 */
 	(struct usb_descriptor_header *) &ecm_data_nop_intf,
 	(struct usb_descriptor_header *) &ecm_data_intf,
@@ -303,10 +310,16 @@ static void ecm_do_notify(struct f_ecm *ecm)
 	__le32				*data;
 	int				status;
 
+
+	/* have notification endpoint? */
+	if (!ecm->notify)
+		return;
+	
 	/* notification already in flight? */
 	if (!req)
 		return;
 
+	
 	event = req->buf;
 	switch (ecm->notify_state) {
 	case ECM_NOTIFY_NONE:
@@ -369,6 +382,10 @@ static void ecm_notify_complete(struct usb_ep *ep, struct usb_request *req)
 	struct usb_composite_dev	*cdev = ecm->port.func.config->cdev;
 	struct usb_cdc_notification	*event = req->buf;
 
+	/* have notification endpoint? */
+	if (!ecm->notify)
+		return;
+	
 	switch (req->status) {
 	case 0:
 		/* no fault */
@@ -461,17 +478,20 @@ static int ecm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		if (alt != 0)
 			goto fail;
 
-		if (ecm->notify->driver_data) {
-			VDBG(cdev, "reset ecm control %d\n", intf);
-			usb_ep_disable(ecm->notify);
-		} else {
-			VDBG(cdev, "init ecm ctrl %d\n", intf);
-			ecm->notify_desc = ep_choose(cdev->gadget,
-					ecm->hs.notify,
-					ecm->fs.notify);
+		/* have notification endpoint? */
+		if (ecm->notify) {
+			if (ecm->notify->driver_data) {
+				VDBG(cdev, "reset ecm control %d\n", intf);
+				usb_ep_disable(ecm->notify);
+			} else {
+				VDBG(cdev, "init ecm ctrl %d\n", intf);
+				ecm->notify_desc = ep_choose(cdev->gadget,
+						   ecm->hs.notify,
+						   ecm->fs.notify);
+			}
+			usb_ep_enable(ecm->notify, ecm->notify_desc);
+			ecm->notify->driver_data = ecm;
 		}
-		usb_ep_enable(ecm->notify, ecm->notify_desc);
-		ecm->notify->driver_data = ecm;
 
 	/* Data interface has two altsettings, 0 and 1 */
 	} else if (intf == ecm->data_id) {
@@ -546,10 +566,14 @@ static void ecm_disable(struct usb_function *f)
 	if (ecm->port.in_ep->driver_data)
 		gether_disconnect(&ecm->port);
 
-	if (ecm->notify->driver_data) {
-		usb_ep_disable(ecm->notify);
-		ecm->notify->driver_data = NULL;
-		ecm->notify_desc = NULL;
+
+	/* have notification endpoint? */
+	if (ecm->notify) {
+		if (ecm->notify->driver_data) {
+			usb_ep_disable(ecm->notify);
+			ecm->notify->driver_data = NULL;
+			ecm->notify_desc = NULL;
+		}
 	}
 }
 
@@ -638,27 +662,30 @@ ecm_bind(struct usb_configuration *c, struct usb_function *f)
 	ecm->port.out_ep = ep;
 	ep->driver_data = cdev;	/* claim */
 
-	/* NOTE:  a status/notification endpoint is *OPTIONAL* but we
-	 * don't treat it that way.  It's simpler, and some newer CDC
-	 * profiles (wireless handsets) no longer treat it as optional.
-	 */
+	/* NOTE:  treat the status/notification endpoint as *OPTIONAL*	*/ 
+#ifndef CPU_LF1000
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_ecm_notify_desc);
-	if (!ep)
-		goto fail;
-	ecm->notify = ep;
-	ep->driver_data = cdev;	/* claim */
+#else
+    ep = NULL;
+#endif
+	if (!ep) {
+		ecm->notify = NULL;	/* no notification endpoint */
+		ecm->notify_req = NULL;	/* no notification buffer */
+	} else {
+		ecm->notify = ep;
+		ep->driver_data = cdev;	/* claim */
+		status = -ENOMEM;
 
-	status = -ENOMEM;
-
-	/* allocate notification request and buffer */
-	ecm->notify_req = usb_ep_alloc_request(ep, GFP_KERNEL);
-	if (!ecm->notify_req)
-		goto fail;
-	ecm->notify_req->buf = kmalloc(ECM_STATUS_BYTECOUNT, GFP_KERNEL);
-	if (!ecm->notify_req->buf)
-		goto fail;
-	ecm->notify_req->context = ecm;
-	ecm->notify_req->complete = ecm_notify_complete;
+		/* allocate notification request and buffer */
+		ecm->notify_req = usb_ep_alloc_request(ep, GFP_KERNEL);
+		if (!ecm->notify_req)
+			goto fail;
+		ecm->notify_req->buf = kmalloc(ECM_STATUS_BYTECOUNT, GFP_KERNEL);
+		if (!ecm->notify_req->buf)
+			goto fail;
+		ecm->notify_req->context = ecm;
+		ecm->notify_req->complete = ecm_notify_complete;
+	}
 
 	/* copy descriptors, and track endpoint copies */
 	f->descriptors = usb_copy_descriptors(ecm_fs_function);
@@ -669,8 +696,12 @@ ecm_bind(struct usb_configuration *c, struct usb_function *f)
 			f->descriptors, &fs_ecm_in_desc);
 	ecm->fs.out = usb_find_endpoint(ecm_fs_function,
 			f->descriptors, &fs_ecm_out_desc);
+#ifndef CPU_LF1000
 	ecm->fs.notify = usb_find_endpoint(ecm_fs_function,
 			f->descriptors, &fs_ecm_notify_desc);
+#else
+	ecm->fs.notify = NULL;
+#endif
 
 	/* support all relevant hardware speeds... we expect that when
 	 * hardware is dual speed, all bulk-capable endpoints work at
@@ -684,6 +715,7 @@ ecm_bind(struct usb_configuration *c, struct usb_function *f)
 		hs_ecm_notify_desc.bEndpointAddress =
 				fs_ecm_notify_desc.bEndpointAddress;
 
+
 		/* copy descriptors, and track endpoint copies */
 		f->hs_descriptors = usb_copy_descriptors(ecm_hs_function);
 		if (!f->hs_descriptors)
@@ -693,8 +725,12 @@ ecm_bind(struct usb_configuration *c, struct usb_function *f)
 				f->hs_descriptors, &hs_ecm_in_desc);
 		ecm->hs.out = usb_find_endpoint(ecm_hs_function,
 				f->hs_descriptors, &hs_ecm_out_desc);
+#ifndef CPU_LF1000
 		ecm->hs.notify = usb_find_endpoint(ecm_hs_function,
 				f->hs_descriptors, &hs_ecm_notify_desc);
+#else
+		ecm->hs.notify = NULL;
+#endif
 	}
 
 	/* NOTE:  all that is done without knowing or caring about
@@ -708,7 +744,7 @@ ecm_bind(struct usb_configuration *c, struct usb_function *f)
 	DBG(cdev, "CDC Ethernet: %s speed IN/%s OUT/%s NOTIFY/%s\n",
 			gadget_is_dualspeed(c->cdev->gadget) ? "dual" : "full",
 			ecm->port.in_ep->name, ecm->port.out_ep->name,
-			ecm->notify->name);
+			(ecm->notify) ? ecm->notify->name : "NULL");
 	return 0;
 
 fail:
@@ -744,8 +780,10 @@ ecm_unbind(struct usb_configuration *c, struct usb_function *f)
 		usb_free_descriptors(f->hs_descriptors);
 	usb_free_descriptors(f->descriptors);
 
-	kfree(ecm->notify_req->buf);
-	usb_ep_free_request(ecm->notify, ecm->notify_req);
+	if (ecm->notify_req != NULL)
+		kfree(ecm->notify_req->buf);
+	if (ecm->notify != NULL)
+		usb_ep_free_request(ecm->notify, ecm->notify_req);
 
 	ecm_string_defs[1].s = NULL;
 	kfree(ecm);
@@ -768,6 +806,7 @@ ecm_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 {
 	struct f_ecm	*ecm;
 	int		status;
+
 
 	if (!can_support_ecm(c->cdev->gadget) || !ethaddr)
 		return -EINVAL;

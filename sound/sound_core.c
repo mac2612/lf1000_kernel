@@ -586,6 +586,7 @@ static int soundcore_open(struct inode *inode, struct file *file)
 	
 	spin_lock(&sound_loader_lock);
 	s = __look_for_unit(chain, unit);
+	WARN_ON(!s); /* FIXME: this should never happen */
 	if (s)
 		new_fops = fops_get(s->unit_fops);
 	if (preclaim_oss && !new_fops) {

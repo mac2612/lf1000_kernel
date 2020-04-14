@@ -133,7 +133,7 @@ $(obj)/config_data.h: $(obj)/config_data.gz FORCE
 $(obj)/time.o: $(obj)/timeconst.h
 
 quiet_cmd_timeconst  = TIMEC   $@
-      cmd_timeconst  = $(PERL) $< $(CONFIG_HZ) > $@
+      cmd_timeconst  = $(CONFIG_SHELL) $< $(CONFIG_HZ) $@
 targets += timeconst.h
-$(obj)/timeconst.h: $(src)/timeconst.pl FORCE
+$(obj)/timeconst.h: $(src)/timeconst.sh FORCE
 	$(call if_changed,timeconst)

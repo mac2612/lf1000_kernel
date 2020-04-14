@@ -127,8 +127,11 @@ static int __init early_cachepolicy(char *p)
 		printk(KERN_WARNING "Only cachepolicy=writeback supported on ARMv6 and later\n");
 		cachepolicy = CPOLICY_WRITEBACK;
 	}
-	flush_cache_all();
+	printk(KERN_WARNING, "Cache Flush\n");
+        flush_cache_all();
+	printk(KERN_WARNING, "Set Alignment\n");
 	set_cr(cr_alignment);
+	printk(KERN_WARNING, "Done!\n");
 	return 0;
 }
 early_param("cachepolicy", early_cachepolicy);
@@ -919,8 +922,10 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	/*
 	 * Allocate the vector page early.
 	 */
+	printk("A\n");
 	vectors = early_alloc(PAGE_SIZE);
 
+	printk("B\n");
 	for (addr = VMALLOC_END; addr; addr += PGDIR_SIZE)
 		pmd_clear(pmd_off_k(addr));
 
@@ -953,7 +958,7 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	map.type = MT_MINICLEAN;
 	create_mapping(&map);
 #endif
-
+        printk("C\n");
 	/*
 	 * Create a mapping for the machine vectors at the high-vectors
 	 * location (0xffff0000).  If we aren't using high-vectors, also
@@ -964,13 +969,13 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	map.length = PAGE_SIZE;
 	map.type = MT_HIGH_VECTORS;
 	create_mapping(&map);
-
+        printk("D\n");
 	if (!vectors_high()) {
 		map.virtual = 0;
 		map.type = MT_LOW_VECTORS;
 		create_mapping(&map);
 	}
-
+        printk("E\n");
 	/*
 	 * Ask the machine support to map in the statically mapped devices.
 	 */
@@ -983,8 +988,9 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	 * any write-allocated cache lines in the vector page are written
 	 * back.  After this point, we can start to touch devices again.
 	 */
-	local_flush_tlb_all();
-	flush_cache_all();
+        printk("Flushing\n");
+	//local_flush_tlb_all();
+	//flush_cache_all();
 }
 
 static void __init kmap_init(void)
@@ -1026,23 +1032,29 @@ static void __init map_lowmem(void)
 void __init paging_init(struct machine_desc *mdesc)
 {
 	void *zero_page;
-
+        printk("build_mem_type_table\n");
 	build_mem_type_table();
+        printk("sanity_check_meminfo\n");
 	sanity_check_meminfo();
+	printk("perpare_page_table\n");
 	prepare_page_table();
+	printk("map_lowmem\n");
 	map_lowmem();
+        printk("devicemaps_init\n");
 	devicemaps_init(mdesc);
+	printk("kmap_init\n");
 	kmap_init();
 
 	top_pmd = pmd_off_k(0xffff0000);
-
+        printk("early_alloc\n");
 	/* allocate the zero page. */
 	zero_page = early_alloc(PAGE_SIZE);
-
+        printk("bootmem_init\n");
 	bootmem_init();
-
+        printk("zero page\n");
 	empty_zero_page = virt_to_page(zero_page);
 	__flush_dcache_page(NULL, empty_zero_page);
+	printk("Done!");
 }
 
 /*

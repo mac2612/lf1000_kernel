@@ -48,6 +48,8 @@
 #define SST49LF008A		0x005a
 #define AT49BV6416		0x00d6
 
+#define WAIT_TIDA		150	// wait 150ns after reset
+
 static int cfi_amdstd_read (struct mtd_info *, loff_t, size_t, size_t *, u_char *);
 static int cfi_amdstd_write_words(struct mtd_info *, loff_t, size_t, size_t *, const u_char *);
 static int cfi_amdstd_write_buffers(struct mtd_info *, loff_t, size_t, size_t *, const u_char *);
@@ -78,8 +80,7 @@ static struct mtd_chip_driver cfi_amdstd_chipdrv = {
 	.module		= THIS_MODULE
 };
 
-
-/* #define DEBUG_CFI_FEATURES */
+#define DEBUG_CFI_FEATURES
 
 
 #ifdef DEBUG_CFI_FEATURES
@@ -1172,6 +1173,7 @@ static int __xipram do_write_oneword(struct map_info *map, struct flchip *chip, 
 	cfi_send_gen_cmd(0x55, cfi->addr_unlock2, chip->start, map, cfi, cfi->device_type, NULL);
 	cfi_send_gen_cmd(0xA0, cfi->addr_unlock1, chip->start, map, cfi, cfi->device_type, NULL);
 	map_write(map, datum, adr);
+	cfi_udelay(1);
 	chip->state = FL_WRITING;
 
 	INVALIDATE_CACHE_UDELAY(map, chip,
@@ -1212,7 +1214,7 @@ static int __xipram do_write_oneword(struct map_info *map, struct flchip *chip, 
 	if (!chip_good(map, adr, datum)) {
 		/* reset on all failures. */
 		map_write( map, CMD(0xF0), chip->start );
-		/* FIXME - should have reset delay before continuing */
+		ndelay(WAIT_TIDA);	// delay after reset
 
 		if (++retry_cnt <= MAX_WORD_RETRIES)
 			goto retry;
@@ -1456,7 +1458,7 @@ static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
 	/* reset on all failures. */
 	map_write( map, CMD(0xF0), chip->start );
 	xip_enable(map, chip, adr);
-	/* FIXME - should have reset delay before continuing */
+	ndelay(WAIT_TIDA);	// delay after reset
 
 	printk(KERN_WARNING "MTD %s(): software timeout\n",
 	       __func__ );
@@ -1630,7 +1632,7 @@ static int __xipram do_erase_chip(struct map_info *map, struct flchip *chip)
 	if (!chip_good(map, adr, map_word_ff(map))) {
 		/* reset on all failures. */
 		map_write( map, CMD(0xF0), chip->start );
-		/* FIXME - should have reset delay before continuing */
+		ndelay(WAIT_TIDA);	// delay after reset
 
 		ret = -EIO;
 	}

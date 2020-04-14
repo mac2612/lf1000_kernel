@@ -1101,6 +1101,10 @@ MODULE_LICENSE ("GPL");
 #define TMIO_OHCI_DRIVER	ohci_hcd_tmio_driver
 #endif
 
+#if defined(CONFIG_ARCH_LF1000)
+#include "ohci-lf1000.c"
+#define PLATFORM_DRIVER		ohci_hcd_lf1000_driver
+#endif
 #ifdef CONFIG_MACH_JZ4740
 #include "ohci-jz4740.c"
 #define PLATFORM_DRIVER	ohci_hcd_jz4740_driver

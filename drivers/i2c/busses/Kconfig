@@ -76,6 +76,32 @@ config I2C_AMD8111
 	  This driver can also be built as a module.  If so, the module
 	  will be called i2c-amd8111.
 
+config I2C_LF1000
+	tristate "LF1000 I2C"
+	help
+		This supports the I2C interface on the LF1000 processor.
+
+config I2C_LF1000_CHANNEL
+	int "LF1000 I2C channel"
+	depends on I2C_LF1000
+	default 0
+	help
+		Choose the channel for the LF1000 I2C controller.  If you are
+		unsure, choose the default.
+
+config I2C_LF1000
+	tristate "LF1000 I2C"
+	help
+		This supports the I2C interface on the LF1000 processor.
+
+config I2C_LF1000_CHANNEL
+	int "LF1000 I2C channel"
+	depends on I2C_LF1000
+	default 0
+	help
+		Choose the channel for the LF1000 I2C controller.  If you are
+		unsure, choose the default.
+
 config I2C_I801
 	tristate "Intel 82801 (ICH/PCH)"
 	depends on PCI

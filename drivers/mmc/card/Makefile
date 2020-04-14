@@ -8,3 +8,4 @@ obj-$(CONFIG_MMC_TEST)		+= mmc_test.o
 
 obj-$(CONFIG_SDIO_UART)		+= sdio_uart.o
 
+obj-$(CONFIG_SM2683LT)		+= sm2683lt.o

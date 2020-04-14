@@ -1428,7 +1428,7 @@ void mmc_rescan(struct work_struct *work)
 {
 	struct mmc_host *host =
 		container_of(work, struct mmc_host, detect.work);
-	u32 ocr;
+	u32 ocr = 0;
 	int err;
 	unsigned long flags;
 	int i;

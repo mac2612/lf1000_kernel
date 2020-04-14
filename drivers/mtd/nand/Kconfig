@@ -99,6 +99,160 @@ config MTD_NAND_AMS_DELTA
 	help
 	  Support for NAND flash on Amstrad E3 (Delta).
 
+config MTD_NAND_LF1000
+	tristate "NAND Flash device on Leapfrog LF1000"
+	depends on ARCH_LF1000 && MTD_PARTITIONS && LF1000_GPIO
+	help
+	  Support for NAND flash on Leap Frog LF1000.
+
+config MTD_NAND_LF1000_HOTSWAP
+	bool "Cartridge hot swap support for Leapfrog LF1000"
+	default y
+	depends on MTD_NAND_LF1000
+	help
+		Support for cartridge hot swap.  
+		Say 'Y' when cartridge hot swap is desired.
+
+config MTD_OTP_SANDISK_PROGRAM
+	bool "Support programming to SanDisk OTP chip"
+	default y
+	depends on MTD_NAND_LF1000
+	help
+		Support for programming SanDisk OTP chip. 
+		Say 'Y' when you need to program Sandisk OTP chip.
+
+config MTD_NAND_LF1000_HWECC
+	bool "Hardware ECC support for Leapfrog LF1000"
+	default y
+	depends on MTD_NAND_LF1000
+	help
+		Support for hardware ECC on the LF1000 processor.  
+		Say 'Y' when MLC NAND flash is supported.
+
+config MTD_NAND_LF1000_MLC_SCRUB_THRESHOLD
+	int "MLC block scrubbing threshold"
+	default 2
+	range 1 4
+	depends on MTD_NAND_LF1000
+	help
+	  When the MLC NAND driver detects this many bit-flip errors (or more) 
+	  while reading a page, it returns a value that indicates bit-flip 
+	  errors were detected and that it is time to copy the page's erase 
+	  eraseblock contents to another eraseblock.  (UBI calls this process 
+	  "scrubbing".)  Lower values increase wear but reduce the amount of 
+	  time that's spent correcting bit-flip errors.  Higher values reduce 
+	  wear but increase the amount of time that's spent correcting bit-flip 
+	  errors (roughly 1.5 msec per error).  Leave the default value if unsure.
+
+config MTD_NAND_LF1000_PROF
+	bool "Profiling support for Leapfrog LF1000"
+	default n
+	depends on MTD_NAND_LF1000
+	help
+		Support for profiling NAND access on the LF1000 processor.
+
+config MTD_NAND_LF1000_READ_DELAY
+	bool "Support slowing read access to NAND to simulate slower parts"
+	default n
+	depends on MTD_NAND_LF1000
+	help
+		Support slowing down read access to both internal and
+		cartridge NAND by X microseconds, settable from
+		/sys/device/platform/lf1000-nand/read_delay.
+
+config MTD_NAND_LF1000_DEBUG
+	bool "Additional debugging for LF1000 NAND Controller"
+	default n
+	depends on MTD_NAND_LF1000
+	help
+		Additional debugging hooks for LF1000 NAND controller.  If
+		unsure, say N.
+
+config MTD_NAND_LF1000_STRESS_TEST
+	bool "Enable stress testing of NAND subsystem"
+	default n
+	select UBIFS_FS_DEBUG
+	depends on LF1000_STRESS_TEST && MTD_NAND_LF1000
+	help
+		Creates sysfs entry in
+		/sys/device/platform/lf1000-nand/stress
+		to activate various NAND stress tests.
+
+		You do not want this, say N. 
+
+config MTD_NAND_LF1000_TRACK_MLC_ERRORS
+	bool "Collects and reports info about MLC NAND read errors"
+	default n
+	depends on MTD_NAND_LF1000
+	help
+		Collects and reports info about MLC NAND read errors.  If
+		unsure, say N.
+
+config MTD_NAND_LF1000_TRACK_SLC_ERRORS
+	bool "Collects and reports info about SLC NAND read errors"
+	default n
+	depends on MTD_NAND_LF1000
+	help
+		Collects and reports info about SLC NAND read errors.  If
+		unsure, say N.
+
+config MTD_NAND_LF1000_TIMING_TESTS
+	bool "Collects and reports timing data for NAND operations"
+	default n
+	depends on MTD_NAND_LF1000
+	help
+		Collects and reports timing data for NAND operations.
+		When this is 'Y', tracking of MLC and SLC errors is suppressed.
+		If unsure, say N.
+
+config NAND_LF1000_P0_SIZE
+	hex "Size of Emerald_Boot partition in NAND flash."
+	depends on MTD_NAND_LF1000
+	default 0x00100000
+	help
+		Size of zeroeth partition of LF1000 NAND flash.  Must be aligned to
+		erase block size.  This is where the LF1000 bootloader
+		lives.  You probably don't want to mess with this setting.
+
+config NAND_LF1000_P1_SIZE
+	hex "Size of Kernel partition of LF1000 NAND flash."
+	depends on MTD_NAND_LF1000
+	default 0x00500000
+	help
+		Size of Kernel partition of LF1000 NAND flash.
+		Must be aligned to erase block size.  
+		Only mess with this setting if you know what you're doing.
+		The default setting is appropriate for an MLC NAND flash.
+
+config NAND_LF1000_P2_SIZE
+	hex "Size of RFS partition of LF1000 NAND flash."
+	depends on MTD_NAND_LF1000
+	default 0x02800000
+	help
+		Size of Linux Root File System partition of LF1000 NAND flash.  Must
+		be aligned to erase block size.  Only mess with this setting if you
+		know what you're doing.
+
+config NAND_LF1000_P3_SIZE
+	hex "Size of Linux Bulk partition of LF1000 NAND flash."
+	depends on MTD_NAND_LF1000
+	default 0x00000000
+	help
+		Size of Bulk partition of LF1000 NAND flash.  Must
+		be aligned to erase block size.  Only mess with this setting if you
+		know what you're doing.
+		The magic size "0" means grow to end of master MTD device.
+
+config NAND_LF1000_CART_SIZE
+	hex "Size of the LF1000 NAND Flash cartridge."
+	depends on MTD_NAND_LF1000
+	default 0x10000000
+	help
+		Size of the single partition on the LF1000 NAND Flash 
+		cartridge.  Must be aligned to block size and there may be
+		multiple partitions in the future.  Only mess with this setting
+		if you know what you're doing.
+
 config MTD_NAND_OMAP2
 	tristate "NAND Flash device on OMAP2 and OMAP3"
 	depends on ARM && (ARCH_OMAP2 || ARCH_OMAP3)

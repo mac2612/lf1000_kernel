@@ -37,6 +37,12 @@
 
 #include <asm/uaccess.h>
 
+
+#ifdef CONFIG_MTD_OTP_SANDISK_PROGRAM
+#include <linux/io.h>
+#include <linux/mtd/nand.h>
+#include <linux/delay.h>
+#endif
 #define MTD_INODE_FS_MAGIC 0x11307854
 static DEFINE_MUTEX(mtd_mutex);
 static struct vfsmount *mtd_inode_mnt __read_mostly;
@@ -49,6 +55,9 @@ struct mtd_file_info {
 	struct mtd_info *mtd;
 	struct inode *ino;
 	enum mtd_file_modes mode;
+#ifdef CONFIG_MTD_OTP_SANDISK_PROGRAM
+	int  otp_flag;
+#endif	
 };
 
 static loff_t mtd_lseek (struct file *file, loff_t offset, int orig)
@@ -137,6 +146,9 @@ static int mtd_open(struct inode *inode, struct file *file)
 	}
 	mfi->ino = mtd_ino;
 	mfi->mtd = mtd;
+#ifdef CONFIG_MTD_OTP_SANDISK_PROGRAM		
+	mfi->otp_flag = 0;
+#endif	
 	file->private_data = mfi;
 
 out:
@@ -152,6 +164,10 @@ static int mtd_close(struct inode *inode, struct file *file)
 	struct mtd_info *mtd = mfi->mtd;
 
 	DEBUG(MTD_DEBUG_LEVEL0, "MTD_close\n");
+
+#ifdef CONFIG_MTD_OTP_SANDISK_PROGRAM		
+	mfi->otp_flag = 0;
+#endif	
 
 	/* Only sync if opened RW */
 	if ((file->f_mode & FMODE_WRITE) && mtd->sync)
@@ -264,6 +280,109 @@ static ssize_t mtd_read(struct file *file, char __user *buf, size_t count,loff_t
 	return total_retlen;
 } /* mtd_read */
 
+#ifdef CONFIG_MTD_OTP_SANDISK_PROGRAM
+
+#define OTP_SANDISK_PAGESIZE   512
+#define OTP_SANDISK_PAGESIZE_SHIFT   9
+
+/* return value negative: something wrong, positive, number of bytes written */
+static ssize_t mtd_write_sandisk_otp(struct file *file, const char __user *buf, size_t count,loff_t *ppos)
+{
+	struct mtd_file_info *mfi = file->private_data;
+	struct mtd_info *mtd = mfi->mtd;
+	char *kbuf;
+
+	uint8_t b1;
+	struct nand_chip *chip = mtd->priv;
+	uint32_t addr;
+	int i;
+		
+	if(count != OTP_SANDISK_PAGESIZE) {
+		printk(KERN_ERR "Only support write to OTP %dbyte per write !\n", OTP_SANDISK_PAGESIZE);
+		return -EINVAL;
+	}
+
+	kbuf=kmalloc(count, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+	
+	if (copy_from_user(kbuf, buf, count)) {
+		kfree(kbuf);
+		return -EFAULT;
+	}
+	// printk(KERN_INFO "Program offset at %lld \n", *ppos);
+	
+	chip->select_chip(mtd, 0);
+	udelay(2);
+	chip->cmd_ctrl(mtd, NAND_CMD_SEQIN, NAND_CLE);
+	
+	addr = *ppos;
+	
+	if((addr & 0x01FF) != 0) {
+		printk(KERN_ERR "Error, address is not page aligned, addr = 0x%x\n", addr);
+	}
+	
+#if 0	
+	chip->cmd_ctrl(mtd, addr, NAND_ALE);
+	chip->cmd_ctrl(mtd, (addr>> 8), NAND_ALE);
+	chip->cmd_ctrl(mtd, (addr>> 16), NAND_ALE);
+	chip->cmd_ctrl(mtd, (addr>> 24), NAND_ALE);
+#else
+	addr = addr >> OTP_SANDISK_PAGESIZE_SHIFT;
+	chip->cmd_ctrl(mtd, 0, NAND_ALE);
+	chip->cmd_ctrl(mtd, (addr>>0), NAND_ALE);	
+	chip->cmd_ctrl(mtd, (addr>>8), NAND_ALE);
+	chip->cmd_ctrl(mtd, (addr>>16), NAND_ALE);
+#endif	
+	
+	for( i=0; i<OTP_SANDISK_PAGESIZE; i++ )	
+		writeb(kbuf[i], chip->IO_ADDR_W);
+	
+	chip->cmd_ctrl(mtd, NAND_CMD_PAGEPROG, NAND_CLE);
+
+	#if 1
+	chip->cmd_ctrl(mtd, NAND_CMD_STATUS, NAND_CLE);
+	for(i=0; i<80; i++) {
+		b1 = readb(chip->IO_ADDR_R);
+		
+		/* page successfully written */
+		if(b1 & 0x40) {
+			*ppos += OTP_SANDISK_PAGESIZE;				
+			kfree(kbuf);
+			
+			/* is it the end of the chip*/
+			if(*ppos == mtd->size) {
+				mfi->otp_flag = 0;
+				printk(KERN_INFO "Driver: Program OTP at the end i=%d !! \n", i);				
+			}
+			return OTP_SANDISK_PAGESIZE;
+		}
+		udelay(100);
+	}
+	#else
+	for(i=0; i<80; i++) {
+		if(chip->dev_ready(mtd)) {
+			*ppos += OTP_SANDISK_PAGESIZE;				
+			kfree(kbuf);
+
+			/* is it the end of the chip*/
+			if(*ppos == mtd->size) {
+				mfi->otp_flag = 0;
+			}
+			return OTP_SANDISK_PAGESIZE;
+		}
+		udelay(100);
+	}
+	#endif
+
+	printk(KERN_INFO "Program offset at %lld time out !! \n", *ppos);
+	
+	mfi->otp_flag = 0;
+	kfree(kbuf);
+	return -EFAULT;
+}
+#endif
+
 static ssize_t mtd_write(struct file *file, const char __user *buf, size_t count,loff_t *ppos)
 {
 	struct mtd_file_info *mfi = file->private_data;
@@ -276,6 +395,12 @@ static ssize_t mtd_write(struct file *file, const char __user *buf, size_t count
 
 	DEBUG(MTD_DEBUG_LEVEL0,"MTD_write\n");
 
+#ifdef CONFIG_MTD_OTP_SANDISK_PROGRAM
+	if((strcmp(mtd->name, "Cartridge") == 0)  && (mfi->otp_flag == 1)){
+		return mtd_write_sandisk_otp(file, buf, count, ppos);
+	}
+#endif
+	
 	if (*ppos == mtd->size)
 		return -ENOSPC;
 
@@ -889,6 +1014,57 @@ static int mtd_ioctl(struct file *file, u_int cmd, u_long arg)
 	}
 #endif
 
+#ifdef CONFIG_MTD_OTP_SANDISK_PROGRAM
+	case SDOTPPREP:
+	{
+		uint8_t b1, b2;
+		struct nand_chip *chip;
+	
+		chip = mtd->priv;
+		if(!chip) {
+			printk(KERN_ERR "SDOTPPREP, mtd->priv null !!\n");
+			return -EOPNOTSUPP;
+		}
+		
+		// printk(KERN_INFO "page_shift=0x%x, pagemask = 0x%x, \n", chip->page_shift, chip->pagemask);
+
+		
+		chip->select_chip(mtd, 0);         /* 0: select chip, -1: deselect chip */
+
+		/* first verify that the mtd is the right device type */
+		chip->cmdfunc(mtd, NAND_CMD_RESET, -1, -1);
+		udelay(10);
+		chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
+		b1 = chip->read_byte(mtd);
+		b2 = chip->read_byte(mtd);
+		if ((0x45 != b1) ||  (0x76 != b2)) {
+			printk(KERN_ERR "Not SanDisk OTP chip, b1 = 0x%u b2=0x%u\n", b1, b2);
+			return -EOPNOTSUPP;
+		}
+		
+		/* Reset */
+		chip->cmdfunc(mtd, NAND_CMD_RESET, -1, -1);
+
+		// wait for 10 microseconds		
+		udelay(10);
+
+		/* Read ID 3x */
+		#if 0
+		chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
+		chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
+		chip->cmdfunc(mtd, NAND_CMD_READID, 0x00, -1);
+		#else
+		chip->cmd_ctrl(mtd, NAND_CMD_READID, NAND_CLE);
+		chip->cmd_ctrl(mtd, NAND_CMD_READID, NAND_CLE);
+		chip->cmd_ctrl(mtd, NAND_CMD_READID, NAND_CLE);		
+		#endif
+		
+		mfi->otp_flag = 1;
+		
+		break;
+	}
+#endif
+	
 	/* This ioctl is being deprecated - it truncates the ecc layout */
 	case ECCGETLAYOUT:
 	{
@@ -940,6 +1116,50 @@ static int mtd_ioctl(struct file *file, u_int cmd, u_long arg)
 		file->f_pos = 0;
 		break;
 	}
+	
+	case BBTERASE:
+	{
+		void bbt_erase (struct mtd_info *mtd);
+		/*** This code lifted from mtdpart.c ***/
+		/* Our partition node structure */
+		struct mtd_part {
+			struct mtd_info mtd;
+			struct mtd_info *master;
+			u_int32_t offset;
+			int index;
+			struct list_head list;
+			int registered;
+		};
+
+#define PART(x)  ((struct mtd_part *)(x))
+		struct mtd_part *part = PART(mtd);
+		struct mtd_info *master = part->master;
+		/*** End of lifting from mtdpart.c ***/
+		bbt_erase (master);
+		break;
+	}
+
+	case BBTSCAN:
+	{
+		void bbt_scan (struct mtd_info *mtd);
+		/*** This code lifted from mtdpart.c ***/
+		/* Our partition node structure */
+		struct mtd_part {
+			struct mtd_info mtd;
+			struct mtd_info *master;
+			u_int32_t offset;
+			int index;
+			struct list_head list;
+			int registered;
+		};
+
+		struct mtd_part *part = PART(mtd);
+		struct mtd_info *master = part->master;
+		/*** End of lifting from mtdpart.c ***/
+		bbt_scan (master);
+		break;
+	}
+
 
 #ifdef CONFIG_MTD_PARTITIONS
 	case BLKPG:

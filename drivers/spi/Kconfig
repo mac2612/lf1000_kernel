@@ -167,6 +167,39 @@ config SPI_IMX
 	  This enables using the Freescale i.MX SPI controllers in master
 	  mode.
 
+config SPI_LF1000
+	bool "LF1000 SPI controller"
+	depends on ARCH_LF1000
+	help
+	  This enables using the LF1000 SPI controller in master mode.
+
+config SPI_LF1000_CHANNEL_0
+	tristate "LF1000 SPI Channel 0"
+	depends on SPI_LF1000
+	default y
+	help
+	  Enable channel 0 of the LF1000 SPI controller.  On all current
+	  platforms, this is used for LCD control, so say Y.
+
+config SPI_LF1000_CHANNEL_1
+	tristate "LF1000 SPI Channel 1"
+	depends on SPI_LF1000
+	default n
+	help
+	  Enable channel 1 of the LF1000 SPI controller.  On all current
+	  platforms, these signals are wired as GPIOs to push-buttons, so
+	  say N.
+
+config SPI_LF1000_CHANNEL_2
+	tristate "LF1000 SPI Channel 2"
+	depends on SPI_LF1000
+	default n
+	help
+	  Enable channel 2 of the LF1000 SPI controller.  On all current
+	  platforms, these signals are routed to the cartridge connector
+	  for potential future expansion, but conflicts with the GPIOs
+	  allotted for cartridge identification, so say N.
+
 config SPI_LM70_LLP
 	tristate "Parallel port adapter for LM70 eval board (DEVELOPMENT)"
 	depends on PARPORT && EXPERIMENTAL

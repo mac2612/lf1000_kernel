@@ -30,6 +30,7 @@ obj-$(CONFIG_MTD_OOPS)		+= mtdoops.o
 nftl-objs		:= nftlcore.o nftlmount.o
 inftl-objs		:= inftlcore.o inftlmount.o
 
-obj-y		+= chips/ lpddr/ maps/ devices/ nand/ onenand/ tests/
+# Move nand/ before maps/ so that lf1000 NOR chip shows up later
+obj-y		+= chips/ lpddr/ devices/ nand/ maps/ onenand/ tests/
 
 obj-$(CONFIG_MTD_UBI)		+= ubi/

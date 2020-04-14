@@ -813,7 +813,6 @@ int gether_setup(struct usb_gadget *g, u8 ethaddr[ETH_ALEN])
 
 		the_dev = dev;
 	}
-
 	return status;
 }
 

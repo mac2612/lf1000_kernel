@@ -2218,6 +2218,7 @@ int usb_add_hcd(struct usb_hcd *hcd,
 	hcd->authorized_default = hcd->wireless? 0 : 1;
 	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
 
+
 	/* HC is in reset state, but accessible.  Now do the one-time init,
 	 * bottom up so that hcds can customize the root hubs before khubd
 	 * starts talking to them.  (Note, bus id is assigned early too.)
@@ -2226,6 +2227,7 @@ int usb_add_hcd(struct usb_hcd *hcd,
 		dev_dbg(hcd->self.controller, "pool alloc failed\n");
 		return retval;
 	}
+
 
 	if ((retval = usb_register_bus(&hcd->self)) < 0)
 		goto err_register_bus;
@@ -2349,6 +2351,8 @@ err_hcd_driver_start:
 		free_irq(irqnum, hcd);
 err_request_irq:
 err_hcd_driver_setup:
+	hcd->self.root_hub = NULL;
+	usb_put_dev(rhdev);
 err_set_rh_speed:
 	usb_put_dev(hcd->self.root_hub);
 err_allocate_root_hub:

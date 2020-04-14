@@ -1254,6 +1254,6 @@ int uvc_video_enable(struct uvc_streaming *stream, int enable)
 	if (ret < 0)
 		return ret;
 
-	return uvc_init_video(stream, GFP_KERNEL);
+	return uvc_init_video(stream, GFP_NOWAIT);
 }
 

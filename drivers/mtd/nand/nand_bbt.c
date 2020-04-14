@@ -509,6 +509,12 @@ static int create_bbt(struct mtd_info *mtd, uint8_t *buf,
 	loff_t from;
 	size_t readlen;
 
+	if (this->ecc.mode == NAND_ECC_NONE)
+	{
+		printk(KERN_INFO "SKIPPING: Scanning device for bad blocks\n");
+		return 0;
+	}
+		
 	printk(KERN_INFO "Scanning device for bad blocks\n");
 
 	if (bd->options & NAND_BBT_SCANALLPAGES)
@@ -1458,6 +1464,42 @@ int nand_isbad_bbt(struct mtd_info *mtd, loff_t offs, int allowbbt)
 		return allowbbt ? 0 : 1;
 	}
 	return 1;
+}
+
+/* RTD: New feature to forget contents of bad block table */
+void bbt_erase (struct mtd_info *mtd)
+{
+	struct nand_chip *chip = mtd->priv;
+	int len = mtd->size >> (chip->bbt_erase_shift + 2);
+	memset (chip->bbt, 0, len);
+	mtd->ecc_stats.badblocks = 0;
+	printk ("bbt_erase: len=%d size=%d\n", len, mtd->size);
+}
+/* RTD: New feature to rescan the BBT */
+void bbt_scan (struct mtd_info *mtd)
+{
+	struct nand_chip *chip = mtd->priv;
+	uint8_t *buf;
+	int len, x;
+
+	/* Forget old data */
+	bbt_erase (mtd);
+
+	/* Allocate a temporary buffer for one eraseblock incl. oob */
+	len = (1 << chip->bbt_erase_shift);
+	len += (len >> chip->page_shift) * mtd->oobsize;
+	buf = vmalloc(len);
+	if (!buf) {
+		printk(KERN_ERR "bbt_scan: Out of memory\n");
+		/* 
+		kfree(this->bbt);
+		this->bbt = NULL; */
+		return; /*  -ENOMEM; */
+	}
+	x = create_bbt (mtd, buf, chip->badblock_pattern, -1);
+	printk ("bbt_scan len=%d x=%d bbcount=%d\n", len, x, 
+		mtd->ecc_stats.badblocks);
+	vfree(buf);
 }
 
 EXPORT_SYMBOL(nand_scan_bbt);

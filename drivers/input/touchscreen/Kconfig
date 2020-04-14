@@ -629,6 +629,26 @@ config TOUCHSCREEN_TOUCHIT213
 	  To compile this driver as a module, choose M here: the
 	  module will be called touchit213.
 
+config TOUCHSCREEN_LF1000
+	tristate "LF1000 touchscreen"
+	depends on ARCH_LF1000	
+	help
+	  Say Y here if you have an LF1000 with touchscreen connected to
+	  your systemi (ADC0 to ADC3).
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called lf1000_touch.
+
+config TOUCHSCREEN_LF1000_PRESSURE
+	bool "Use pressure readings/calculations in the driver"
+	depends on TOUCHSCREEN_LF1000
+	default n
+	help
+	  Say Y here to enable the driver to use calculated pressure to
+	  judge when the screen is touched.
+
 config TOUCHSCREEN_TSC2007
 	tristate "TSC2007 based touchscreens"
 	depends on I2C

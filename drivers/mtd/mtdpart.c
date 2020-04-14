@@ -379,6 +379,8 @@ static struct mtd_part *allocate_partition(struct mtd_info *master,
 		return ERR_PTR(-ENOMEM);
 	}
 
+	slave->mtd.priv = master->priv;
+	
 	/* set up the MTD object for this partition */
 	slave->mtd.type = master->type;
 	slave->mtd.flags = master->flags & ~part->mask_flags;

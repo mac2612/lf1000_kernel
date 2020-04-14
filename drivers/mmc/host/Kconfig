@@ -278,6 +278,31 @@ config MMC_IMX
 
 	  If unsure, say N.
 
+config MMC_MES
+	tristate "MagicEyes SDIO host controller support"
+	depends on PLAT_MES
+	help
+	   This enables support for the SD/SDIO host controller in MagicEyes
+           SoCs such as the Pollux.
+
+config MMC_MES_CHANNEL0
+	bool "Enable SDIO controller 0"
+	depends on MMC_MES
+	default Y
+	help
+	   This enables SD/SDIO host controller channel 0.  If you have a
+	   device or SD slot wired to host controller 0, say Y here.  Otherwise
+	   say N.  You must enable at least one host controller.
+
+config MMC_MES_CHANNEL1
+	bool "Enable SDIO controller 1"
+	depends on MMC_MES
+	default N
+	help
+	   This enables SD/SDIO host controller channel 1.  If you have a
+	   device or SD slot wired to host controller 1, say Y here.  Otherwise
+	   say N.  You must enable at least one host controller.
+
 config MMC_MSM
 	tristate "Qualcomm SDCC Controller Support"
 	depends on MMC && ARCH_MSM
