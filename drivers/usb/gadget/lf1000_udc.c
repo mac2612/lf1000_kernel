@@ -1602,14 +1602,14 @@ int usb_gadget_probe_driver(struct usb_gadget_driver *driver, int (*bind)(struct
 
 	dev_info(&udc->pdev->dev, "%s '%s'\n", __FUNCTION__,
 			driver->driver.name);
-
-	if (bind || !driver->setup
-			|| driver->speed < USB_SPEED_FULL) {
+        
+	if (!driver || driver->speed < USB_SPEED_FULL || !bind || !driver->setup) {
 		dev_err(&udc->pdev->dev,
 			"invalid driver: bind %p setup %p speed %d\n",
 			bind, driver->setup, driver->speed);
 		return -EINVAL;
 	}
+
 
 #if defined(MODULE)
 	if (!driver->unbind) {
