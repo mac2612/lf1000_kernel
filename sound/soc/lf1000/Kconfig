@@ -1,0 +1,36 @@
+config SND_LF1000_SOC
+	tristate "SoC Audio for the LeapFrog LF1000 chips"
+	depends on ARCH_LF1000
+	select LF1000_DMA_CONTROLLER
+	help
+	  Say Y or M if you want to add support for codecs attached to
+	  the LF1000 I2S interface.
+
+config SND_LF1000_SOC_DEBUG
+	bool "Additional debugging for the LF1000 SoC Audio"
+	default N
+	depends on ARCH_LF1000 && SND_LF1000_SOC
+	help
+	  Say Y here to see additional debug statements from the LF1000 SoC
+	  drivers.  They may affect timing.  If unsure, say N.
+
+config SND_LF1000_SOC_I2S
+	tristate
+
+config SND_LF1000_SOC_DIDJ_CS43L22
+	tristate "SoC Audio support for LeapFrog Didj with Cirrus Logic codec"
+	depends on SND_LF1000_SOC && ARCH_LF1000
+	select SND_LF1000_SOC_I2S
+	select SND_SOC_CS43L22
+	help
+	  Say Y or M if you want to enable support for audio on a Didj with the
+	  Cirrus Logic codec.  If unsure, say M.
+
+config SND_LF1000_SOC_DIDJ_LFP100
+	tristate "SoC Audio support for LeapFrog Didj with LFP100 codec"
+	depends on SND_LF1000_SOC && ARCH_LF1000
+	select SND_LF1000_SOC_I2S
+	select SND_SOC_LFP100
+	help
+	  Say Y or M if you want to enable support for audio on a Didj with the
+	  LFP100 codec.  If unusre, say M.

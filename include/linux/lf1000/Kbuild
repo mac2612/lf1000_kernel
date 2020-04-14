@@ -1,0 +1,5 @@
+header-y += dpc_ioctl.h
+header-y += gpio_ioctl.h
+header-y += mlc_ioctl.h
+header-y += spi_ioctl.h
+header-y += lf1000fb.h
