@@ -2132,13 +2132,13 @@ static int lf1000_nand_wait(struct mtd_info *mtd, struct nand_chip *chip)
 	if (state == FL_ERASING)
 		timeo += (HZ * 400) / 1000;
 	else
-		timeo += (HZ * 20) / 1000;
+		timeo += (HZ * 200) / 1000;
 
 	led_trigger_event(nand_led_trigger, LED_FULL);
 
 	/* Apply this short delay always to ensure that we do wait tWB in
 	 * any case on any machine. */
-	ndelay(2000);
+	ndelay(4000);
 
 	if ((state == FL_ERASING) && (chip->options & NAND_IS_AND))
 		chip->cmdfunc(mtd, NAND_CMD_STATUS_MULTI, -1, -1);
