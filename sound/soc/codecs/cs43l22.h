@@ -40,7 +40,7 @@
 #define CS43L22_MIXER_MONO		0x50
 #define CS43L22_MIXER_STEREO		0x00
 
-extern struct snd_soc_dai cs43l22_dai;
+extern struct snd_soc_dai_driver cs43l22_dai;
 extern struct snd_soc_codec_device soc_codec_dev_cs43l22;
 
 struct cs43l22_setup_data {
