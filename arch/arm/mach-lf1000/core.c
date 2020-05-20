@@ -9,6 +9,7 @@
  */
 #include <linux/init.h>
 #include <linux/device.h>
+#include <linux/types.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
 #include <linux/sysdev.h>
@@ -98,7 +99,7 @@ void __init lf1000_map_io(void)
 	//	lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_HIGH);
 	//	lf1000_io_desc[0].pfn    = __phys_to_pfn(LF1000_NAND_BASE_HIGH);
 	//} else {
-		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_LOW);
+       		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_LOW);
 		lf1000_io_desc[0].pfn     = __phys_to_pfn(LF1000_NAND_BASE_LOW);
 	//}
         
@@ -110,11 +111,12 @@ void __init lf1000_map_io(void)
 	printk("BB\n");
 	// need early clock initialization
 	lf1000_clock_init();
+	writel(0x00fc0000, IO_ADDRESS(LF1000_GPIOCURRENT_BASE + GPIOPADSTRENGTHBUS));
 	printk("CC\n");
 
 }
 
-struct resource lf1000_audio_resources[] = {
+struct resource lf1000_i2s_resources[] = {
 	[0] = {
 		.start		= LF1000_AUDIO_BASE,
 		.end		= LF1000_AUDIO_END,
@@ -127,12 +129,28 @@ struct resource lf1000_audio_resources[] = {
 	},
 };
 
-struct platform_device lf1000_audio_device = {
-	.name			= "lf1000-audio",
+struct platform_device lf1000_i2s_device = {
+	.name			= "lf1000-i2s",
 	.id			= -1,
-	.num_resources		= ARRAY_SIZE(lf1000_audio_resources),
-	.resource		= lf1000_audio_resources,
+	.num_resources		= ARRAY_SIZE(lf1000_i2s_resources),
+	.resource		= lf1000_i2s_resources,
 };
+
+static struct platform_device lf1000_pcm_device = {
+        .name   = "lf1000-pcm",
+        .id             = -1,
+};
+
+
+static struct platform_device lf1000_cs43l22_device = {
+        .name   = "didj-cs43l22",
+        .id             = -1,
+
+};
+
+
+
+
 
 #if defined CONFIG_I2C_LF1000 || CONFIG_I2C_LF1000_MODULE
 struct resource lf1000_i2c0_resources[] = {
@@ -165,6 +183,7 @@ struct resource lf1000_i2c1_resources[] = {
 
 static struct i2c_board_info __initdata lf1000_i2c_codec_cs43l22 = {
 	I2C_BOARD_INFO("CS43L22", 0x94),
+	.flags = I2C_CLIENT_TEN,
 	.irq = 0,
 };
 
@@ -674,7 +693,9 @@ static struct platform_device *devices[] __initdata = {
 	&lf1000_udc_device,
 	&lf1000_uhc_device,
 	&lf1000_rtc_device,
-	&lf1000_audio_device,
+	&lf1000_i2s_device,
+	&lf1000_pcm_device,
+	&lf1000_cs43l22_device,
 	&lf1000_asoc_device,
 	&lf1000_ga3d_device,
 	&lf1000_power_device,
@@ -901,13 +922,13 @@ static irqreturn_t lf1000_timer_interrupt(int irq, void *dev_id)
 	/* 
 	 * have at least one timer tick, account for additional
 	 * ticks recorded by intertick timer
-	 */
+	 */	
 	do {
 		timer_tick();
 		if (intertick_count > TIMER_SYS_TICK)
 			intertick_count -= TIMER_SYS_TICK;
 	} while (intertick_count > TIMER_SYS_TICK);
-
+	
 	// write_sequnlock(&xtime_lock);
 
 	return IRQ_HANDLED;
