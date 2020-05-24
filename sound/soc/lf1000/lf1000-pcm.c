@@ -263,9 +263,9 @@ static snd_pcm_uframes_t lf1000_pcm_pointer(struct snd_pcm_substream *substream)
 	spin_lock(&prtd->lock);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		ptr = dma_get_write_addr(prtd->dma_ch) - prtd->dma_buf;
+		ptr = phys_to_virt(dma_get_write_addr(prtd->dma_ch)) - prtd->dma_buf;
 	else
-		ptr = dma_get_read_addr(prtd->dma_ch) - prtd->dma_buf;
+		ptr = phys_to_virt(dma_get_read_addr(prtd->dma_ch)) - prtd->dma_buf;
 
 	spin_unlock(&prtd->lock);
 
