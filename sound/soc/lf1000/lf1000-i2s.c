@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
+#include <linux/slab.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 
@@ -112,6 +113,11 @@
 
 /* CLKGEN1 register */
 #define CLKSRC_CLKGEN0		(0x7 << 1) 
+
+struct i2s_snd_dev {
+        struct i2s_plat_data      *pdata;
+        struct snd_soc_dai_driver *pdrv;
+};
 
 const static struct lf1000_pcm_dma_params lf1000_i2s_pcm_stereo_out = {
 	.name		= "I2S PCM Stereo out",
@@ -213,7 +219,7 @@ static int lf1000_i2s_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	regs = readw(lf1000_i2s.adi_base + I2S_CONFIG);
 	regs &= ~IFMODE_MASK;
 
-	dev_dbg(dai->dev, "changing I2S format to 0x%X",
+	dbg("changing I2S format to 0x%X",
 			fmt & SND_SOC_DAIFMT_FORMAT_MASK);
 
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
@@ -234,7 +240,7 @@ static int lf1000_i2s_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	/* set invert mode */
 	regs = readw(lf1000_i2s.adi_base + CLKGEN1);
 
-	dev_dbg(dai->dev, "changing I2S invert to: %d\n",
+	dbg("changing I2S invert to: %d\n",
 			fmt & SND_SOC_DAIFMT_INV_MASK);
 
 	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
@@ -277,6 +283,7 @@ static int lf1000_i2s_set_dai_sysclk(struct snd_soc_dai *dai, int clk_id,
 	/* use PLL0/lf1000_i2s.div, don't invert clock */
 	regs = readw(lf1000_i2s.adi_base + CLKGEN0);
 
+    dbg("lf1000-i2s: Clk div = %d", lf1000_i2s.div);
 	clear_clk_div(regs);
 	set_clk_div(regs, lf1000_i2s.div);
 	writew(regs | CLKSRC_PLL0, lf1000_i2s.adi_base + CLKGEN0);
@@ -315,9 +322,9 @@ static int lf1000_i2s_hw_params(struct snd_pcm_substream *substream,
 	unsigned int regs, bitwidth, rate, channels;
 
 	bitwidth = params_format(params);
-	//dbg("%s.%d entered  - %p(%d)-%p,%d\n",
-	//	__FUNCTION__, __LINE__, substream,
-	//	substream->stream, rtd->dai->cpu_dai->dma_data, bitwidth);
+	dbg("%s.%d entered  - %p(%d)-%p,%d\n",
+		__FUNCTION__, __LINE__, substream,
+		substream->stream, snd_soc_dai_get_dma_data(rtd->cpu_dai, substream), bitwidth);
 
 	// check parameter
 	if (bitwidth != SNDRV_PCM_FORMAT_S16) {
@@ -329,9 +336,9 @@ static int lf1000_i2s_hw_params(struct snd_pcm_substream *substream,
 	rate = params_rate(params);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		snd_soc_dai_set_dma_data(rtd->dai->cpu_dai, substream, (void *)&lf1000_i2s_pcm_stereo_out);
+		snd_soc_dai_set_dma_data(rtd->cpu_dai, substream, (void *)&lf1000_i2s_pcm_stereo_out);
 	else
-		snd_soc_dai_set_dma_data(rtd->dai->cpu_dai, substream, (void *)&lf1000_i2s_pcm_stereo_in);
+		snd_soc_dai_set_dma_data(rtd->cpu_dai, substream, (void *)&lf1000_i2s_pcm_stereo_in);
 
 	regs = readw(lf1000_i2s.adi_base + AUDIO_BUFF_CONFIG);
 
@@ -496,25 +503,17 @@ static int lf1000_i2s_register_init(struct lf1000_i2s_info *i2sdev)
 	return 0;
 }
 
-static int lf1000_i2s_probe(struct platform_device *pdev,
-			    struct snd_soc_dai *dai)
+static int lf1000_i2s_probe(struct snd_soc_dai *dai)
 {
+	struct i2s_snd_dev  *i2s = snd_soc_dai_get_drvdata(dai);
+	struct i2s_plat_data *pdata = i2s->pdata;
 	int ret = 0;
-
 	dbg("Entered %s.%d\n", __FUNCTION__, __LINE__);
-
-	if (!pdev)
-		dbg("pdev is NULL\n");
-	else {
-		dbg("pdev->name is '%s'\n", pdev->name);
-		dai->dev = &pdev->dev; /* for debug messages -- Doh! */
-	}
-
 	memset(&lf1000_i2s, 0, sizeof(struct lf1000_i2s_info));
 
 	lf1000_i2s.adi_base = (void __iomem*)IO_ADDRESS(LF1000_AUDIO_BASE);
 	if (!lf1000_i2s.adi_base) {
-		dev_err(&pdev->dev, "lf1000 ADI ioremap error\n");
+		printk(KERN_ERR "lf1000 ADI ioremap error\n");
 		ret = -ENOENT;
 		goto out_remap;
 	}
@@ -531,7 +530,7 @@ static int lf1000_i2s_probe(struct platform_device *pdev,
 	ret = request_irq(lf1000_i2s.irq, lf1000_i2s_irq, 0, DRIVER_NAME,
 		&lf1000_i2s);
 	if (ret) {
-		dev_err(&pdev->dev, "failed to request IRQ\n");
+		printk(KERN_ERR "failed to request IRQ\n");
 		goto out_irq;
 	}
 
@@ -563,8 +562,7 @@ out_remap:
 	return ret;
 }
 
-static void lf1000_i2s_remove(struct platform_device *pdev,
-			     struct snd_soc_dai *dai)
+static int lf1000_i2s_remove(struct snd_soc_dai *dai)
 {
 	dbg("Entered: %s.%d\n", __FUNCTION__, __LINE__);
 
@@ -587,9 +585,7 @@ static struct snd_soc_dai_ops lf1000_i2s_dai_ops = {
 };
 
 
-struct snd_soc_dai lf1000_i2s_dai = {
-	.name		= DRIVER_NAME,
-	.id		= 0,
+struct snd_soc_dai_driver lf1000_i2s_dai = {
 	.probe		= lf1000_i2s_probe,
 	.remove		= lf1000_i2s_remove,
 	.playback	= {
@@ -607,16 +603,80 @@ struct snd_soc_dai lf1000_i2s_dai = {
 	.ops = &lf1000_i2s_dai_ops,
 };
 
+
+static __devinit int lf1000_snd_i2s_probe(struct platform_device *pdev)
+{
+	printk(KERN_ERR "Probing i2s!\n");
+        struct i2s_plat_data     * plat = pdev->dev.platform_data;
+        struct i2s_snd_dev       * i2s  = NULL;
+        struct snd_soc_dai_driver* dai  = &lf1000_i2s_dai;
+        int    ret = 0;
+
+        printk(KERN_WARNING "%s\n", __func__);
+
+    /*  allocate i2c_port data */
+    i2s = kzalloc(sizeof(struct i2s_snd_dev), GFP_KERNEL);
+    if (!i2s) {
+        printk(KERN_ERR "fail, %s allocate driver info ...\n", pdev->name);
+        return -ENOMEM;
+    }
+
+        ret = snd_soc_register_dai(&pdev->dev, dai);
+        if (ret) {
+		printk(KERN_ERR "ERROR %d registering DAI", ret);
+                goto err_out;
+	    }
+
+        /* invert MCLK for LFP100/LFP200 */
+        //plat->clk_inv0 = 1;
+
+        i2s->pdata = plat;
+        i2s->pdrv  = dai;
+
+        platform_set_drvdata(pdev, i2s);
+
+        return ret;
+
+err_out:
+        kfree(i2s);
+	printk(KERN_ERR "Error!!!!!");
+        return ret;
+}
+
+
+static __devexit int lf1000_snd_i2s_remove(struct platform_device *pdev)
+{
+        struct i2s_snd_dev *i2s = platform_get_drvdata(pdev);
+
+        printk(KERN_WARNING "%s\n", __func__);
+
+        snd_soc_unregister_dai(&pdev->dev);
+
+        if (i2s)
+                kfree(i2s);
+
+        return 0;
+}
+
+static struct platform_driver lf1000_i2s_driver = {
+	.probe  = lf1000_snd_i2s_probe,
+	.remove = lf1000_snd_i2s_remove,
+	.driver = {
+		.name 	= DRIVER_NAME,
+		.owner  = THIS_MODULE,
+	},
+};
+
 EXPORT_SYMBOL_GPL(lf1000_i2s_dai);
 
 static int __init lf1000_i2s_init(void)
 {
-	return snd_soc_register_dai(&lf1000_i2s_dai);
+	return platform_driver_register(&lf1000_i2s_driver);
 }
 
 static void __exit lf1000_i2s_exit(void)
 {
-	snd_soc_unregister_dai(&lf1000_i2s_dai);
+	platform_driver_unregister(&lf1000_i2s_driver);
 }
 
 module_init(lf1000_i2s_init);
@@ -626,3 +686,4 @@ module_exit(lf1000_i2s_exit);
 MODULE_AUTHOR("Scott Esters");
 MODULE_DESCRIPTION("LF1000 I2S SoC Interface");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:lf1000-i2s");
