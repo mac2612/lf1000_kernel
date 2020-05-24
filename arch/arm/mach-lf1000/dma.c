@@ -414,6 +414,14 @@ int dma_start(unsigned int ch)
 
 	dmach->cur_node = node = list_first_entry(&dmach->active_nodes,
 		struct item_node, link);
+
+	DBG("dma_ch id: %x addr: %x", dmach->device_id, dmach->reg);
+
+	DBG("src_addr %x dst_addr %x size %d req_id %x", 
+	  node->src_addr, 
+	  node->dst_addr, 
+	  node->size, 
+	  node->req_id);
 	
 	writel(node->src_addr, dmach->reg + DMASRCADDR);
 	writel(node->dst_addr, dmach->reg + DMADSTADDR);
