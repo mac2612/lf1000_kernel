@@ -50,7 +50,7 @@ struct lf1000_runtime_data {
 
 static const struct snd_pcm_hardware lf1000_pcm_hardware = {
 	.info			= SNDRV_PCM_INFO_MMAP |
-				  SNDRV_PCM_INFO_BLOCK_TRANSFER |
+	              SNDRV_PCM_INFO_BLOCK_TRANSFER |
 				  SNDRV_PCM_INFO_MMAP_VALID |
 				  SNDRV_PCM_INFO_INTERLEAVED |
 				  SNDRV_PCM_INFO_PAUSE | 
@@ -86,8 +86,8 @@ static int lf1000_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct lf1000_runtime_data *prtd = runtime->private_data;
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct lf1000_pcm_dma_params *dma = snd_soc_dai_get_dma_data(rtd->dai->cpu_dai, substream);
-	unsigned long totbytes = params_buffer_bytes(params);
+	struct lf1000_pcm_dma_params *dma = snd_soc_dai_get_dma_data(rtd->cpu_dai, substream);
+	//unsigned long totbytes = params_buffer_bytes(params);
 	int ret = 0;
   
 	dbg("%s.%d enter %p(%d)\n", __FUNCTION__, __LINE__, substream,
@@ -108,17 +108,20 @@ static int lf1000_pcm_hw_params(struct snd_pcm_substream *substream,
 		}
 	}
 	prtd->params = dma;
-
+	//prtd->params = snd_soc_dai_get_dma_data(rtd->cpu_dai, substream);
+    //ptrd->params->dma_intr_handler = lf1000_pcm_irqhandler;
 	snd_pcm_set_runtime_buffer(substream, &substream->dma_buffer);
+	runtime->dma_bytes = params_buffer_bytes(params);
 
-	runtime->dma_bytes = totbytes;
+
+	//runtime->dma_bytes = totbytes;
 
 	spin_lock_irq(&prtd->lock);
 	prtd->dma_buf = runtime->dma_addr;
 	spin_unlock_irq(&prtd->lock);
 
 	dbg("%s.%d leaving\n", __FUNCTION__, __LINE__);
-	return 0;
+	return 0; //snd_pcm_lib_malloc_pages(substream, params_buffer_bytes(params));
 }
 
 static int lf1000_pcm_hw_free(struct snd_pcm_substream *substream)
@@ -160,10 +163,11 @@ static int lf1000_pcm_prepare(struct snd_pcm_substream *substream)
 		(int)runtime->period_step,
 		runtime->frame_bits, size);
 
-	buf_addr = prtd->dma_buf;
+	//buf_addr = prtd->dma_buf;
+    buf_addr = runtime->dma_addr; // &runtime->dma_buffer_p;
 
 	for (i = 0; i < runtime->periods; i++) {
-		addr_list[i] = buf_addr;
+		addr_list[i] = virt_to_phys(buf_addr);
 		buf_addr += size;
 	}
 
@@ -179,10 +183,10 @@ static int lf1000_pcm_prepare(struct snd_pcm_substream *substream)
 		ctrl.src_width = runtime->frame_bits / 8;
 		ctrl.dest_width = runtime->frame_bits / 8;
 
-		dbg("%s DMA circular write from %X to %X, %d bufs of %d\n",
+		dbg("%s DMA circular write from %X to %X, %d bufs of %d addr_list %x first %x\n",
 				__FUNCTION__, runtime->dma_addr,
 				prtd->params->dma_addr, runtime->periods,
-				size);
+				size, virt_to_phys((unsigned int *)addr_list), addr_list[0]);
 
 		ret = dma_circ_write(prtd->dma_ch, (unsigned int *)addr_list,
 				prtd->params->dma_addr, runtime->periods, size,
@@ -247,7 +251,11 @@ static int lf1000_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 static snd_pcm_uframes_t lf1000_pcm_pointer(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	struct lf1000_runtime_data *prtd = runtime->private_data;
+	struct snd_soc_pcm_runtime *soc_runtime = substream->private_data;
+	struct snd_soc_dai *cpu_dai = soc_runtime->cpu_dai;
+	struct lf1000_runtime_data *prtd= runtime->private_data;
+	//prtd = snd_soc_dai_get_dma_data(cpu_dai, substream);
+
 	u32 ptr;
 
 	dbg("%s.%d enter\n", __FUNCTION__, __LINE__);
@@ -265,7 +273,7 @@ static snd_pcm_uframes_t lf1000_pcm_pointer(struct snd_pcm_substream *substream)
 		ptr = 0;
 	}
 
-	dbg("%s.%d leaving ptr=%u frames=%u\n", __FUNCTION__, __LINE__, ptr,
+	dbg("%s.%d leaving dma_buf=%x ptr=%u frames=%u\n", __FUNCTION__, __LINE__, prtd->dma_buf, ptr,
 		bytes_to_frames(runtime, ptr));
 	return bytes_to_frames(runtime, ptr);
 }
@@ -318,6 +326,8 @@ static int lf1000_pcm_mmap(struct snd_pcm_substream *substream,
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	dbg("%s.%d enter\n", __FUNCTION__, __LINE__);
+
+	dbg("%s.%d Doing mmap: area %x, addr %x, bytes %x", __FUNCTION__, __LINE__, runtime->dma_area, runtime->dma_addr, runtime->dma_bytes);
 	
 	return dma_mmap_writecombine(substream->pcm->card->dev, vma,
 				     runtime->dma_area,
@@ -348,15 +358,15 @@ static int lf1000_pcm_preallocate_dma_buffer(struct snd_pcm *pcm, int stream)
 	buf->dev.type = SNDRV_DMA_TYPE_DEV;
 	buf->dev.dev = pcm->card->dev;
 	buf->private_data = NULL;
+	buf->bytes = size;
+
 	buf->area = dma_alloc_writecombine(pcm->card->dev, size, &buf->addr,
 			GFP_KERNEL | GFP_DMA);
 	if (!buf->area)
 		return -ENOMEM;
-	
+	printk("dma_alloc_writecombine %d %x", size, buf->addr);
 	if (!lf1000_is_shadow())
 		buf->addr |= PHYS_OFFSET_NO_SHADOW;
-
-	buf->bytes = size;
 
 	dbg("%s leaving dma_buffer = 0x%X\n", __FUNCTION__, buf->addr);
 	return 0;
@@ -398,34 +408,40 @@ static int lf1000_pcm_new(struct snd_card *card, struct snd_soc_dai *dai,
 	if (!card->dev->coherent_dma_mask)
 		card->dev->coherent_dma_mask = DMA_BIT_MASK(32);
 
-	if (dai->playback.channels_min) {
+	if (dai->driver->playback.channels_min) {
 		ret = lf1000_pcm_preallocate_dma_buffer(pcm,
 				SNDRV_PCM_STREAM_PLAYBACK);
 		if (ret)
 			return ret;
 	}
 	
-	if (dai->capture.channels_min) {
+	if (dai->driver->capture.channels_min) {
 		ret = lf1000_pcm_preallocate_dma_buffer(pcm,
 				SNDRV_PCM_STREAM_CAPTURE);
 	}
+
 
 	dbg("%s.%d leaving\n", __FUNCTION__, __LINE__);
 	return ret;
 }
 
+struct snd_soc_platform_driver lf1000_snd_pcm_plat_drv = {
+	.ops	        = &lf1000_pcm_ops,
+	.pcm_new	= lf1000_pcm_new,
+	.pcm_free	= lf1000_pcm_free_dma_buffers,
+};
+
 
 int lf1000_pcm_probe(struct platform_device *pdev)
 {
 	dbg("%s.%d enter\n", __FUNCTION__, __LINE__);
-
-	return 0;
+        return snd_soc_register_platform(&pdev->dev, &lf1000_snd_pcm_plat_drv);
 }
 
 int lf1000_pcm_remove(struct platform_device *pdev)
 {
 	dbg("%s.%d enter\n", __FUNCTION__, __LINE__);
-
+        snd_soc_unregister_platform(&pdev->dev);
 	return 0;
 }
 
@@ -443,34 +459,35 @@ int lf1000_pcm_resume(struct snd_soc_dai *dai)
 	return 0;
 }
 
-struct snd_soc_platform lf1000_soc_platform = {
-	.name		= DRIVER_NAME,
-	.probe		= lf1000_pcm_probe,
-	.remove		= lf1000_pcm_remove,
-	.suspend	= lf1000_pcm_suspend,
-	.resume		= lf1000_pcm_resume,
-	.pcm_ops	= &lf1000_pcm_ops,
-	.pcm_new	= lf1000_pcm_new,
-	.pcm_free	= lf1000_pcm_free_dma_buffers,
+static struct platform_driver lf1000_snd_pcm_driver = {
+	.probe = lf1000_pcm_probe,
+	.remove = lf1000_pcm_remove,
+	.driver = {
+		.name = "lf1000-pcm",
+		.owner = THIS_MODULE,
+	},
 };
 
-EXPORT_SYMBOL_GPL(lf1000_soc_platform);
+EXPORT_SYMBOL_GPL(lf1000_snd_pcm_driver);
 
-static int __init lf1000_soc_platform_init(void)
+static int __init lf1000_snd_pcm_init(void)
 {
-	return snd_soc_register_platform(&lf1000_soc_platform);
+	printk(KERN_WARNING "XXXX LF1000-PCM init");
+	return platform_driver_register(&lf1000_snd_pcm_driver);
 }
 
-static void __exit lf1000_soc_platform_exit(void)
+static void __exit lf1000_snd_pcm_exit(void)
 {
-	snd_soc_unregister_platform(&lf1000_soc_platform);
+	printk(KERN_ERR "XXXX LF1000 PCM exit");
+	platform_driver_unregister(&lf1000_snd_pcm_driver);
 }
 
-module_init(lf1000_soc_platform_init);
-module_exit(lf1000_soc_platform_exit);
+module_init(lf1000_snd_pcm_init);
+module_exit(lf1000_snd_pcm_exit);
 
 
 MODULE_AUTHOR("Scott Esters");
 MODULE_DESCRIPTION("LF1000 SoC driver");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:lf1000-pcm");
 
