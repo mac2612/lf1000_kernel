@@ -22,6 +22,12 @@
 
 #define CODEC_NAME	"CS43L22"
 
+#ifdef CONFIG_SND_LF1000_SOC_DEBUG
+#define dbg(x...)	printk(KERN_ALERT CODEC_NAME ": " x)
+#else
+#define dbg(x...)
+#endif
+
 #define CS43L22_FIRSTREG	0x01
 #define CS43L22_LASTREG		0x26
 #define	CS43L22_NUMREGS		(CS43L22_LASTREG - CS43L22_FIRSTREG + 1)
@@ -59,7 +65,12 @@ static int cs43l22_write_reg(struct snd_soc_codec *codec, unsigned int reg,
 	msg.len = 2;
 	msg.flags = 0; /* write */
 
-	printk(KERN_ERR "cs43l22_write_reg %x %x %x %d\n", client, client->adapter, &msg, client->adapter->retries);
+	dbg("cs43l22_write_reg client %x adapter %x retries %d reg %x val %x\n", 
+	  (unsigned int)client, 
+	  (unsigned int)client->adapter, 
+	  (unsigned int)client->adapter->retries, 
+	  reg, 
+	  value);
 
 	ret = i2c_transfer(client->adapter, &msg, 1);
 	if (ret < 0)
@@ -74,7 +85,6 @@ static int cs43l22_write_reg(struct snd_soc_codec *codec, unsigned int reg,
 static unsigned int cs43l22_read_reg(struct i2c_client *client,
 		unsigned int reg)
 {
-//	struct i2c_client *client = codec->control_data;
 	struct i2c_msg msg[2];
 	char buf[2];
 	int ret;
@@ -107,7 +117,7 @@ static int cs43l22_write_verify_reg(struct snd_soc_codec *codec,
 	struct i2c_client *client = codec->control_data;	
 	int ret;
 	int retries;
-	printk(KERN_ERR "cs43l22 write_verify_reg %x %x %x\n", codec, reg, value);
+	dbg("cs43l22 write_verify_reg codec %x reg %x val %x\n", (unsigned int)codec, reg, value);
 
 	for (retries = 0; retries < 5; retries++) {
 		cs43l22_write_reg(codec, reg, value);
@@ -170,7 +180,7 @@ static int cs43l22_dai_mute(struct snd_soc_dai *dai, int mute)
 		reg |= 0xF0;
 	cs43l22_write_verify_reg(dai->codec, CS43L22_PLAYBACK_CONTROL_2,
 		reg);
-	printk(KERN_ERR "Digital Mute %d\n", mute || cs43l22->manual_mute);
+	dbg("Digital Mute %d\n", mute || cs43l22->manual_mute);
 
 	return 0;
 }
@@ -183,7 +193,7 @@ static int cs43l22_startup(struct snd_pcm_substream *substream,
 	
 	/* power up amplifier */
 	cs43l22_write_verify_reg(codec, CS43L22_POWER_CONTROL_1, 0x9E);
-        printk(KERN_ERR "Powered up amplifier\n");	
+	dbg("Powered up amplifier\n");	
 	return 0;
 }
 
@@ -195,7 +205,7 @@ static void cs43l22_shutdown(struct snd_pcm_substream *substream,
 
 	/* power down amplifier */
 	cs43l22_write_verify_reg(codec, CS43L22_POWER_CONTROL_1, 0x9F);
-	printk(KERN_ERR "Powered down amplifier\n");
+	dbg("Powered down amplifier\n");
 }
 
 static struct snd_soc_dai_ops cs43l22_dai_ops = {
@@ -207,14 +217,8 @@ static struct snd_soc_dai_ops cs43l22_dai_ops = {
 	.digital_mute	= cs43l22_dai_mute,
 };
 
-#define CS43L22_FORMATS (SNDRV_PCM_FMTBIT_S8 | \
-		SNDRV_PCM_FMTBIT_S16_LE  | SNDRV_PCM_FMTBIT_S16_BE  | \
-		SNDRV_PCM_FMTBIT_S18_3LE | SNDRV_PCM_FMTBIT_S18_3BE | \
-		SNDRV_PCM_FMTBIT_S20_3LE | SNDRV_PCM_FMTBIT_S20_3BE | \
-		SNDRV_PCM_FMTBIT_S24_3LE | SNDRV_PCM_FMTBIT_S24_3BE | \
-		SNDRV_PCM_FMTBIT_S24_LE  | SNDRV_PCM_FMTBIT_S24_BE)
-
-#define CS43L22_FORMATS_OLD (SNDRV_PCM_FMTBIT_S16_LE  | SNDRV_PCM_FMTBIT_S16_BE) 
+// Technically supports S18, 20, 24 etc but this driver is just for the LF1000 anyway.
+#define CS43L22_FORMATS (SNDRV_PCM_FMTBIT_S16_LE  | SNDRV_PCM_FMTBIT_S16_BE) 
 
 
 #define CS43L22_RATES        (SNDRV_PCM_RATE_CONTINUOUS | \
@@ -373,8 +377,8 @@ static const struct snd_kcontrol_new cs43l22_snd_controls[] = {
 
 static int cs43l22_probe(struct snd_soc_codec *codec)
 {
-        struct cs43l22_private *cs43l22 = snd_soc_codec_get_drvdata(codec);
-	int ret, reg;
+    struct cs43l22_private *cs43l22 = snd_soc_codec_get_drvdata(codec);
+	int ret;
 
 	BUG_ON(!codec);
 
@@ -386,39 +390,10 @@ static int cs43l22_probe(struct snd_soc_codec *codec)
 		return ret;
 	}
 
-	//ret = snd_soc_new_pcms(socdev, SNDRV_DEFAULT_IDX1, SNDRV_DEFAULT_STR1);
-	/*
-	ret = snd_soc_codec_set_cache_io(codec, 8, 8, cs43l22->control_type);
-	if (ret < 0) {
-		dev_err(codec->dev, "Failed to set cache I/O: %d\n", ret);
-		return ret;
-	}
-	*/
-
-	// TODO: DAC Configuration
-	//
-		/*
-	 * DAC configuration
-	 * - Use signal processor
-	 * - auto mute
-	 * - vol changes immediate
-	 * - no de-emphasize
-	 */
-	/*
-	reg = CS43L22_DAC_CTL_DATA_SEL(1)
-		| CS43L22_DAC_CTL_AMUTE | CS43L22_DAC_CTL_DACSZ(0);
-	ret = snd_soc_write(codec, CS43L22_DAC_CTL, reg);
-	if (ret < 0)
-		return ret;
-        */
-        
-
-
 	ret = snd_soc_add_controls(codec, cs43l22_snd_controls,
 			ARRAY_SIZE(cs43l22_snd_controls));
 	if (ret < 0) {
 		dev_err(codec->dev, "failed to add controls\n");
-		//snd_soc_free_pcms(socdev);
 		return ret;
 	}
 
@@ -438,81 +413,43 @@ static int cs43l22_i2c_probe(struct i2c_client *i2c_client,
 {
 	struct cs43l22_private *cs43l22;
 	int ret;
-        /*
-	codec = &cs43l22->codec;
-	mutex_init(&codec->mutex);
-	INIT_LIST_HEAD(&codec->dapm_widgets);
-	INIT_LIST_HEAD(&codec->dapm_paths);
-        
-	codec->dev = &i2c_client->dev;
-	codec->name = CODEC_NAME;
-	codec->owner = THIS_MODULE;
-	codec->dai = &cs43l22_dai;
-	codec->num_dai = 1;
-	codec->drvdata = cs43l22;
-	codec->control_data = i2c_client;
-	codec->read = cs43l22_read_reg;
-	codec->write = cs43l22_write_verify_reg;
-	codec->reg_cache = cs43l22->reg_cache;
-	codec->reg_cache_size = CS43L22_NUMREGS;
-        */
+
 	/* Verify that we're talking to a CS43L22 */
 	ret = cs43l22_read_reg(i2c_client, CS43L22_CHIPID); //i2c_client, CS43L22_CHIPID);
-	//ret = i2c_smbus_read_byte_data(i2c_client, CS43L22_CHIPID);
 	if ((ret & 0xF8) != 0xE0) {
 		dev_err(&i2c_client->dev, "i2c-%X is not a CS43L22, got %X\n",
 				i2c_client->addr, ret);
-		ret = -ENODEV;
-		goto out_codec;
+		return -ENODEV;
 	}
 
 	dev_info(&i2c_client->dev, "found CS43L22 rev %X at i2c-%X\n",
 			ret & 0x7, i2c_client->addr);
 
-        cs43l22 = kzalloc(sizeof(struct cs43l22_private), GFP_KERNEL);
+    cs43l22 = kzalloc(sizeof(struct cs43l22_private), GFP_KERNEL);
 	if (!cs43l22)
 		return -ENOMEM;
 	i2c_set_clientdata(i2c_client, cs43l22);
-	cs43l22->control_data = i2c_client;
-	cs43l22->control_type = SND_SOC_I2C;
-
-        /*	
-	ret = cs43l22_fill_cache(cs43l22);
-	if (ret < 0) {
-		kfree(cs43l22);
-		dev_err(&i2c_client->dev, "failed to fill register cache\n");
-		goto out_codec;
-	} */
-	
-
-	//cs43l22_dai->dev = &i2c_client->dev;
 
 	/* Register the DAI. If all the other ASoC driver have already
 	 * registered , then this will call our probe function, so
 	 * cs43l22_codec needs to be ready.
 	 */
-	//cs43l22_codec = codec;
-	//cs43l22 = snd_soc_codec_get_drvdata(codec);
 	cs43l22->control_data = i2c_client;
 	cs43l22->control_type = SND_SOC_I2C;
 	ret = snd_soc_register_codec(&i2c_client->dev, &soc_codec_device_cs43l22, &cs43l22_dai, 1);
 	if (ret < 0) {
+		kfree(cs43l22);
 		dev_err(&i2c_client->dev, "failed to register DAI\n");
-		goto out_codec;
+		return ret;
 	}
 
 	return 0;
-
-out_codec:
-	kfree(cs43l22);
-
-	return ret;
 }
 
 static int cs43l22_i2c_remove(struct i2c_client *i2c_client)
 {
 	struct cs43l22_private *cs43l22 = i2c_get_clientdata(i2c_client);
-        snd_soc_unregister_codec(&i2c_client->dev);
+    snd_soc_unregister_codec(&i2c_client->dev);
 	kfree(cs43l22);
 	return 0;
 }
@@ -533,18 +470,6 @@ static struct i2c_driver cs43l22_i2c_driver = {
 	.probe		= cs43l22_i2c_probe,
 	.remove		= cs43l22_i2c_remove,
 };
-
-
-
-
-static int cs43l22_remove(struct platform_device *pdev)
-{
-	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-
-	//snd_soc_free_pcms(socdev);
-
-	return 0;
-}
 
 static int __init cs43l22_init(void)
 {
