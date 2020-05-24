@@ -93,26 +93,23 @@ static struct map_desc lf1000_io_desc[] __initdata = {
 
 void __init lf1000_map_io(void)
 {
-	printk("AAAA\n");
-	/* fixup NAND address based on SHADOW bit setting */
-	//if (lf1000_is_shadow()) {
-	//	lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_HIGH);
-	//	lf1000_io_desc[0].pfn    = __phys_to_pfn(LF1000_NAND_BASE_HIGH);
-	//} else {
-       		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_LOW);
-		lf1000_io_desc[0].pfn     = __phys_to_pfn(LF1000_NAND_BASE_LOW);
-	//}
-        
-	/* PAD_STRENGTH_BUS: reduce drive to LCD */
-	printk("AAA\n");
-        //writel(0x00fc0000, IO_ADDRESS(LF1000_GPIOCURRENT_BASE + GPIOPADSTRENGTHBUS));
-	printk("AA\n");
 	iotable_init(lf1000_io_desc, ARRAY_SIZE(lf1000_io_desc));
-	printk("BB\n");
 	// need early clock initialization
 	lf1000_clock_init();
+        /* PAD_STRENGTH_BUS: reduce drive to LCD */
 	writel(0x00fc0000, IO_ADDRESS(LF1000_GPIOCURRENT_BASE + GPIOPADSTRENGTHBUS));
-	printk("CC\n");
+
+
+	/* fixup NAND address based on SHADOW bit setting */
+	if (lf1000_is_shadow()) {
+		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_HIGH);
+		lf1000_io_desc[0].pfn    = __phys_to_pfn(LF1000_NAND_BASE_HIGH);
+	} else {
+       		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_LOW);
+		lf1000_io_desc[0].pfn     = __phys_to_pfn(LF1000_NAND_BASE_LOW);
+	}
+
+
 
 }
 
