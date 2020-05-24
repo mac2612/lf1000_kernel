@@ -32,6 +32,12 @@
 #include "didj-cs43l22.h"
 #include "../codecs/cs43l22.h"
 
+#ifdef CONFIG_SND_LF1000_SOC_DEBUG
+#define dbg(x...)	printk(KERN_ALERT DRIVER_NAME ": " x)
+#else
+#define dbg(x...)
+#endif
+
 #define DIDJ_DEFAULT_RATE	32000
 
 static struct snd_soc_card snd_soc_didj_cs43l22;
@@ -143,9 +149,10 @@ static int didj_startup(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = snd_pcm_substream_chip(substream);
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	int ret = 0;
-        printk(KERN_ERR "didj_startup\n");
-    ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF);
 
+	dbg("%s.%d entered\n", __FUNCTION__, __LINE__);
+
+    ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF);
 	if (ret)
 		return ret;
 
@@ -153,18 +160,20 @@ static int didj_startup(struct snd_pcm_substream *substream)
 	if (ret)
 		return ret;
 
+	dbg("%s.%d exit\n", __FUNCTION__, __LINE__);
 	return 0;
 }
 
 static int didj_hw_params(struct snd_pcm_substream *substream,
 		struct snd_pcm_hw_params *params)
 {
-	printk(KERN_ERR "didj_hw_params\n");
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	dbg("%s.%d entered\n", __FUNCTION__, __LINE__);
 
 	snd_soc_dai_set_sysclk(cpu_dai, 0, params_rate(params), 1);
-	
+
+	dbg("%s.%d exit\n", __FUNCTION__, __LINE__);
 	return 0;
 }
 
@@ -190,11 +199,11 @@ static int lfjack_detect(void *data)
 			if (!cur_jack) {
 				priv->codec->driver->write(priv->codec, CS43L22_MIXER,
 					priv->reg26_mixer_jack_low);
-				printk(KERN_ERR "Jack low");
+				dbg("%s.%d: Jack low\n", __FUNCTION__, __LINE__);
 			} else {
 				priv->codec->driver->write(priv->codec, CS43L22_MIXER,
 					priv->reg26_mixer_jack_high);
-				printk(KERN_ERR "Jack high");
+				dbg("%s.%d: Jack high\n", __FUNCTION__, __LINE__);
 			}
 			priv->last_jack = cur_jack;
 			priv->update_jack = 0;
@@ -206,20 +215,18 @@ static int lfjack_detect(void *data)
 
 static int didj_cs43l22_init(struct snd_soc_pcm_runtime *rtd)
 {
-        printk(KERN_INFO "%s: \n", __FUNCTION__);
+    struct snd_soc_codec *codec;
+	int i;
+	dbg("%s.%d entered\n", __FUNCTION__, __LINE__);
 
-                struct snd_soc_codec *codec;
-                int i;
-
-                /* program codec defaults */
-                codec = rtd->codec;
-                for (i = 0; i < ARRAY_SIZE(cs43L22_settings); i++) {
-			printk(KERN_ERR "Writing codec default %x %x", cs43L22_settings[i][0], cs43L22_settings[i][1]);
-                        codec->driver->write(codec, cs43L22_settings[i][0],
-                                cs43L22_settings[i][1]);
-                }
-        printk(KERN_ERR "didj_cs43l22_init settings");
-		/* setup headphone jack monitoring */
+	/* program codec defaults */
+	codec = rtd->codec;
+	for (i = 0; i < ARRAY_SIZE(cs43L22_settings); i++) {
+		dbg("Writing codec default %x %x", cs43L22_settings[i][0], cs43L22_settings[i][1]);
+			codec->driver->write(codec, cs43L22_settings[i][0],
+					cs43L22_settings[i][1]);
+	}
+	/* setup headphone jack monitoring */
 	lfjack = kzalloc(sizeof(struct lfjack_priv), GFP_KERNEL);
 	if (!lfjack)
 		return -ENOMEM;
@@ -250,20 +257,13 @@ static int didj_cs43l22_init(struct snd_soc_pcm_runtime *rtd)
 	}
 
 	/* start jack thread */
+	// FIXME: Change jack monitoring stuff to alsa standard method.
 	sema_init(&lfjack->detect_thread_done, 0);
 	lfjack->run = 1;
 	lfjack->detect_thread = kthread_run(lfjack_detect, (void *)lfjack,
 		"lfjack-detect");	
-        printk(KERN_ERR "didj_cs43l22_init done!\n");
 
-	for (i = 0; i < ARRAY_SIZE(cs43L22_settings); i++) {
-		printk(KERN_ERR "Codec readback %x %x\n", cs43L22_settings[i][0], codec->driver->read(codec, cs43L22_settings[i][0]));
-	}
-
-	    printk("Beepin...\n");
-        codec->driver->write(codec, 0x1E, 0x7F);
-
-        return 0;
+	return 0;
 }
 
 static struct snd_soc_ops didj_ops = {
@@ -291,14 +291,12 @@ static struct snd_soc_card snd_soc_didj_cs43l22 = {
 	.num_links = 1,
 };
 
-
 static struct platform_device *didj_snd_device = NULL;
 
 static int didj_audio_probe(struct platform_device *pdev)
 {
-	struct snd_soc_codec *codec;
 	int ret;
-	int i;
+	dbg("%s.%d entered\n", __FUNCTION__, __LINE__);
 
 	dev_info(&pdev->dev, "%s\n", __FUNCTION__);
 
@@ -307,18 +305,19 @@ static int didj_audio_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	platform_set_drvdata(didj_snd_device, &snd_soc_didj_cs43l22);
-	//didj_snd_devdata_cs43l22.dev = &didj_snd_device->dev;
-        printk(KERN_WARNING "Adding sound device \n");	
+	
+	dbg("%s.%d adding sound device\n", __FUNCTION__, __LINE__);
 	ret = platform_device_add(didj_snd_device);
 	if (ret) {
 		dev_err(&pdev->dev, "can't add sound device\n");
 		platform_device_put(didj_snd_device);
 		return ret;
 	}
-	printk(KERN_WARNING "Done adding sound device!");
+	dbg("%s.%d done adding sound device\n", __FUNCTION__, __LINE__);
 
 	sysfs_create_group(&pdev->dev.kobj, &cs43l22_attr_group);
-	printk(KERN_ERR "Done probe!");
+	dbg("%s.%d exit\n", __FUNCTION__, __LINE__);
+
 	return 0;
 }
 

@@ -627,9 +627,6 @@ static __devinit int lf1000_snd_i2s_probe(struct platform_device *pdev)
                 goto err_out;
 	    }
 
-        /* invert MCLK for LFP100/LFP200 */
-        //plat->clk_inv0 = 1;
-
         i2s->pdata = plat;
         i2s->pdrv  = dai;
 
