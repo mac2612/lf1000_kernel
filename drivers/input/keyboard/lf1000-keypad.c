@@ -67,8 +67,9 @@ static struct button_entry button_map[] = {
  {-1, -1, BUTTON_HINT, KEY_H, EV_KEY, BUTTON_DELAY},/* hint */
  {-1, -1, BUTTON_PAUSE, KEY_P, EV_KEY, BUTTON_DELAY},/* pause */
  {-1, -1, BUTTON_BRIGHTNESS, KEY_X, EV_KEY, BRIGHTNESS_DELAY},/* brightness */
- {-1, -1, BUTTON_VOLUMEUP, KEY_U, EV_KEY, BUTTON_DELAY}, /* volume up/down */
- {-1, -1, BUTTON_VOLUMEDOWN, KEY_D, EV_KEY, BUTTON_DELAY}, 
+ //Vol up/down not ready yet
+ //{-1, -1, BUTTON_VOLUMEUP, KEY_U, EV_KEY, BUTTON_DELAY}, /* volume up/down */
+ //{-1, -1, BUTTON_VOLUMEDOWN, KEY_D, EV_KEY, BUTTON_DELAY}, 
 							/* headphone jack */
  {-1, -1, HEADPHONE_JACK, SW_HEADPHONE_INSERT, EV_SW, BUTTON_DELAY},
 };
