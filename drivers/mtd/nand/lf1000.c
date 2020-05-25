@@ -292,7 +292,7 @@ static struct mtd_partition partition_info[] = {
   	{ .name		= "RFS",
  	  .offset	= LF_P0 + LF_P1,
  	  .size		= LF_P2 },
-  	{ .name		= "Data",
+  	{ .name		= "Bulk",
  	  .offset	= LF_P0 + LF_P1 + LF_P2,
  	  .size		= MTDPART_SIZ_FULL },
 };
