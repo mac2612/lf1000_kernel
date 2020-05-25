@@ -63,10 +63,12 @@ static struct button_entry button_map[] = {
  {-1, -1, BUTTON_B, KEY_B, EV_KEY, BUTTON_DELAY},
  {-1, -1, SHOULDER_LEFT, KEY_L, EV_KEY, BUTTON_DELAY},/* L 'shoulder' */
  {-1, -1, SHOULDER_RIGHT, KEY_R, EV_KEY, BUTTON_DELAY},/* R 'shoulder' */
- {-1, -1, BUTTON_HOME, KEY_M, EV_KEY, BUTTON_DELAY},/* menu / home / start */
- {-1, -1, BUTTON_HINT, KEY_ENTER, EV_KEY, BUTTON_DELAY},/* hint */
+ {-1, -1, BUTTON_HOME, KEY_ENTER, EV_KEY, BUTTON_DELAY},/* menu / home / start */
+ {-1, -1, BUTTON_HINT, KEY_H, EV_KEY, BUTTON_DELAY},/* hint */
  {-1, -1, BUTTON_PAUSE, KEY_P, EV_KEY, BUTTON_DELAY},/* pause */
  {-1, -1, BUTTON_BRIGHTNESS, KEY_X, EV_KEY, BRIGHTNESS_DELAY},/* brightness */
+ {-1, -1, BUTTON_VOLUMEUP, KEY_U, EV_KEY, BUTTON_DELAY}, /* volume up/down */
+ {-1, -1, BUTTON_VOLUMEDOWN, KEY_D, EV_KEY, BUTTON_DELAY}, 
 							/* headphone jack */
  {-1, -1, HEADPHONE_JACK, SW_HEADPHONE_INSERT, EV_SW, BUTTON_DELAY},
 };
@@ -77,7 +79,7 @@ static struct button_entry button_map[] = {
  * definitions. */
 static unsigned int lf1000_keycode[]= {
 	KEY_UP, KEY_DOWN, KEY_RIGHT, KEY_LEFT, 
-	KEY_A, KEY_B, KEY_L, KEY_R, KEY_M, KEY_ENTER, KEY_P, KEY_X};
+	KEY_A, KEY_B, KEY_L, KEY_R, KEY_H, KEY_ENTER, KEY_P, KEY_X, KEY_U, KEY_D};
 
 /*
  * device
