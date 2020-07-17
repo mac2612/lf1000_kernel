@@ -91,6 +91,15 @@ config LF1000_SDRAM_TUNE
 	---help---
 	This option enables the SYSFS MCU_Y entries for tuning SDRAM access.
 
+config LF1000_SHADOWRAM
+	bool "Enable shadow RAM"
+	depends on ARCH_LF1000
+	default n
+	---help---
+	This dictates whether shadow RAM setup is enabled or not. If enabled,
+	RAM is shadowed to 0x00000000. If disabled, RAM remains at 0x80000000.
+	You generally only want to enable this for the Didj, not LX or LPad1.
+
 config LF1000_BOOT_PARAMS_ADDR
 	hex "Address where kernel finds its boot parameters"
 	depends on ARCH_LF1000

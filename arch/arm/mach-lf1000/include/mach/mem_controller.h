@@ -11,7 +11,14 @@
 /* static memory bus */
 #define LF1000_STATIC_BASE_NOSHADOW	0x00000000 /* shadow mode disabled */
 #define LF1000_STATIC_BASE_SHADOW	0x80000000 /* shadow mode */
-#define LF1000_STATIC_BASE	LF1000_STATIC_BASE_NOSHADOW /* not shadow */
+
+/* TODO: Figure this out dynamically or via bootloader arg. */
+#ifdef CONFIG_LF1000_SHADOWRAM
+#define LF1000_STATIC_BASE     LF1000_STATIC_BASE_SHADOW
+#else
+#define LF1000_STATIC_BASE     LF1000_STATIC_BASE_NOSHADOW
+#endif
+
 #define LF1000_STATIC0_BASE	0x00000000
 #define LF1000_STATIC1_BASE	0x04000000
 #define LF1000_STATIC2_BASE	0x08000000

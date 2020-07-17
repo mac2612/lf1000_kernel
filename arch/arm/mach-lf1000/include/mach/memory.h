@@ -29,8 +29,11 @@
 /* NOR BOOT */
 #define PHYS_OFFSET_NO_SHADOW	UL(0x80000000)
 
-#ifndef CONFIG_RUNTIME_PHYS_OFFSET
-#define PHYS_OFFSET	PHYS_OFFSET_NO_SHADOW
+/* TODO: Figure this out dynamically or via bootloader arg. */
+#ifdef CONFIG_LF1000_SHADOWRAM
+#define PHYS_OFFSET	PHYS_OFFSET_SHADOW
+#else
+#define PHYS_OFFSET     PHYS_OFFSET_NO_SHADOW
 #endif
 
 /*
