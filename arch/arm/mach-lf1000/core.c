@@ -101,13 +101,13 @@ void __init lf1000_map_io(void)
 
 
 	/* fixup NAND address based on SHADOW bit setting */
-	if (lf1000_is_shadow()) {
+#ifdef CONFIG_LF1000_SHADOWRAM
 		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_HIGH);
 		lf1000_io_desc[0].pfn    = __phys_to_pfn(LF1000_NAND_BASE_HIGH);
-	} else {
+#else
        		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_LOW);
 		lf1000_io_desc[0].pfn     = __phys_to_pfn(LF1000_NAND_BASE_LOW);
-	}
+#endif
 
 
 
@@ -752,11 +752,11 @@ void __init lf1000_init(void)
 	arm_pm_restart = lf1000_restart;
 
 	/* set NOR flash and NAND addresses depending on boot mode */
-	if (lf1000_is_shadow()) {
+#ifdef CONFIG_LF1000_SHADOWRAM
 		lf1000_nand_resource.start = LF1000_NAND_BASE_HIGH;
-	} else {
+#else
 		lf1000_nand_resource.start = LF1000_NAND_BASE_LOW;
-	}
+#endif
 
 	lf1000_nand_resource.end  = lf1000_nand_resource.start +
 				    LF1000_NAND_SIZE - 1;
