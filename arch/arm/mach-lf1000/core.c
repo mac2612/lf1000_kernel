@@ -65,7 +65,8 @@ static u64 dma_mask_default = 0xffffffffUL;
  */
 
 static struct map_desc lf1000_io_desc[] __initdata = {
-	{	/* SHADOW bit fixup code assumes first entry has NAND info */
+	{
+        	/* SHADOW bit fixup code assumes first entry has NAND info */
 		.virtual	=  IO_ADDRESS(LF1000_NAND_BASE_LOW),
 		.pfn		= __phys_to_pfn(LF1000_NAND_BASE_LOW),
 		.length		= SZ_4K,
@@ -93,23 +94,21 @@ static struct map_desc lf1000_io_desc[] __initdata = {
 
 void __init lf1000_map_io(void)
 {
+
+	/* fixup NAND address based on SHADOW bit setting */
+#ifdef CONFIG_LF1000_SHADOWRAM
+		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_HIGH);
+		lf1000_io_desc[0].pfn    = __phys_to_pfn(LF1000_NAND_BASE_HIGH);
+#else
+       		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_LOW);
+		lf1000_io_desc[0].pfn     = __phys_to_pfn(LF1000_NAND_BASE_LOW);
+#endif
+
 	iotable_init(lf1000_io_desc, ARRAY_SIZE(lf1000_io_desc));
 	// need early clock initialization
 	lf1000_clock_init();
         /* PAD_STRENGTH_BUS: reduce drive to LCD */
 	writel(0x00fc0000, IO_ADDRESS(LF1000_GPIOCURRENT_BASE + GPIOPADSTRENGTHBUS));
-
-
-	/* fixup NAND address based on SHADOW bit setting */
-#ifdef CONFIG_LF1000_SHADOWRAM
-		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_LOW);
-		lf1000_io_desc[0].pfn    = __phys_to_pfn(LF1000_NAND_BASE_LOW);
-#else
-       		lf1000_io_desc[0].virtual = IO_ADDRESS(LF1000_NAND_BASE_HIGH);
-		lf1000_io_desc[0].pfn     = __phys_to_pfn(LF1000_NAND_BASE_HIGH);
-#endif
-
-
 
 }
 
@@ -257,6 +256,7 @@ struct platform_device lf1000_sdhc1_device = {
 #endif /* CONFIG_MMC_MES || CONFIG_MMC_MES_MODULE */
 
 struct resource lf1000_nand_resource = {
+
 	.start			= LF1000_NAND_BASE_LOW,
 	.end			= LF1000_NAND_BASE_LOW +
 				  LF1000_NAND_SIZE - 1,
@@ -753,9 +753,9 @@ void __init lf1000_init(void)
 
 	/* set NOR flash and NAND addresses depending on boot mode */
 #ifdef CONFIG_LF1000_SHADOWRAM
-		lf1000_nand_resource.start = LF1000_NAND_BASE_LOW;
-#else
 		lf1000_nand_resource.start = LF1000_NAND_BASE_HIGH;
+#else
+		lf1000_nand_resource.start = LF1000_NAND_BASE_LOW;
 #endif
 
 	lf1000_nand_resource.end  = lf1000_nand_resource.start +
