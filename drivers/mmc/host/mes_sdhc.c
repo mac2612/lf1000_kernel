@@ -273,13 +273,15 @@ static void mes_sdio_reset_dma(struct mes_sdio_host *host)
 static void mes_sdio_reset_fifo(struct mes_sdio_host *host)
 {
 	u32 tmp = readl(host->base + SDI_CTRL);
+	u32 timeout = 0;
 
 	tmp &= ~((1<<DMARST)|(1<<CTRLRST));
 	tmp |= (1<<FIFORST);
 	writel(tmp, host->base + SDI_CTRL);
+	dev_err(&host->pdev->dev, "Start resetting fifo\n");
 
 	while (readl(host->base + SDI_CTRL) & (1<<FIFORST));
-	dev_dbg(&host->pdev->dev, "Finished resetting fifo\n");
+	dev_err(&host->pdev->dev, "Finished resetting fifo\n");
 }
 
 /* Set the RX and TX FIFO thresholds.  The FIFOs are 64 bytes (16 words) long
@@ -861,10 +863,12 @@ static void mes_sdio_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	if (ios->clock != host->clock_hz) {
 		if (ios->clock > 0) {
-			if (mes_sdio_set_clock_hz(host, ios->clock))
+			if (mes_sdio_set_clock_hz(host, ios->clock)) {
 				dev_err(&host->pdev->dev,
 				"%s.%d card (%p) can't set clock rate\n",
 				__FUNCTION__, __LINE__, host->base);
+				return;
+			}
 			else {
 				host->clock_hz = ios->clock;
 				dev_dbg(&host->pdev->dev, 
@@ -885,10 +889,18 @@ static void mes_sdio_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				break;
 
 			case MMC_POWER_ON:
+				mes_sdio_set_clock_out(host, 0);
+
+					/* drive bus low before cutting power */
+				//	mes_sdio_setup_pins(host, 0);
+				mdelay(10);
+
+
 				mes_sdio_set_clock_out(host, 1);
 				mes_sdio_reset_dma(host);
 				mes_sdio_reset_fifo(host);
-				mdelay(5);
+				mdelay(30);
+				//mdelay(5);
 				break;
 
 			case MMC_POWER_UP:
@@ -947,7 +959,7 @@ static int mes_sdio_probe(struct platform_device *pdev)
 	       MMC_VDD_34_35 | MMC_VDD_35_36;
 
 	mmc->caps = MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED |
-		MMC_CAP_SDIO_IRQ | MMC_CAP_NONREMOVABLE;
+		MMC_CAP_SDIO_IRQ | MMC_CAP_NEEDS_POLL;
 
 	if (!request_mem_region(res->start, RESSIZE(res), res->name)) {
 		dev_err(&pdev->dev, "failed to get IO memory region\n");
