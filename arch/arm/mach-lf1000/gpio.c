@@ -28,7 +28,7 @@
 
 extern struct gpio_device gpio;
 
-spinlock_t gpio_handlers_lock = SPIN_LOCK_UNLOCKED;
+DEFINE_SPINLOCK(gpio_handlers_lock);
 struct gpio_handler gpio_handlers[GPIO_PORT_ALV+1][GPIO_PIN31+1];
 
 /* Set the pin function. */

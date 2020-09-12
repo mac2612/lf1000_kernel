@@ -49,7 +49,7 @@ extern int lf1000_CalcDivider(unsigned int rate_hz, unsigned int desired_mhz);
 static struct adc_device adc = {
 	.mem = NULL,
 	.irq = -1,
-	.lock = SPIN_LOCK_UNLOCKED,
+	.lock = __SPIN_LOCK_UNLOCKED(lock),
 	.busy = 0,
 	.conversion_finished = 1,
 	.show_sample = 0,	/* toggle GPIO pin when ADC is sampled */

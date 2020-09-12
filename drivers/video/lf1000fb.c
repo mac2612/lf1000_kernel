@@ -33,6 +33,7 @@
 #include <asm/uaccess.h>
 #include <asm/cputype.h>
 #include <plat/hardware.h>
+#include <linux/irq.h>
 
 #define DRIVER_NAME		"lf1000-fb"
 #define RESSIZE(res)		(((res)->end - (res)->start))
@@ -1615,10 +1616,13 @@ static int __init lf1000fb_probe(struct platform_device *pdev)
 		goto out_irq;
 	}
 
-	ret = request_irq(info->irq, lf1000fb_irq, IRQF_SHARED,
+	ret = can_request_irq(info->irq, IRQF_SHARED);
+	dev_err(&pdev->dev, "can_request_irq: %d\n", ret);
+
+	ret = request_irq(info->irq, &lf1000fb_irq, IRQF_SHARED,
 			DRIVER_NAME, info);
 	if (ret) {
-		dev_err(&pdev->dev, "can't get DPC IRQ\n");
+		dev_err(&pdev->dev, "can't get DPC IRQ #%d %d\n", info->irq, ret);
 		ret = -ENOENT;
 		goto out_irq;
 	}

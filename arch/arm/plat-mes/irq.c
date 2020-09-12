@@ -50,8 +50,9 @@ static __inline void mes_irq_clear(unsigned int irq)
 		writel((1 << (irq - 32)), IO_ADDRESS(MES_INT_BASE + INTPENDH));
 }
 
-static void mes_irq_mask(unsigned int irq)
+static void mes_irq_mask(struct irq_data *d)
 {
+	unsigned int irq = d->irq;
 	unsigned long val;
 	unsigned int shift =irq & 63;
 
@@ -69,8 +70,9 @@ static void mes_irq_mask(unsigned int irq)
 	}
 }
 
-static void mes_irq_unmask(unsigned int irq)
+static void mes_irq_unmask(struct irq_data *d)
 {
+	unsigned int irq = d->irq;
 	unsigned long val;
 	unsigned int shift = irq & 63;
 
@@ -95,8 +97,9 @@ static struct irq_chip mes_irq_chip = {
 	.irq_unmask		= mes_irq_unmask,
 };
 
-static void mes_dma_irq_mask(unsigned int irq)
+static void mes_dma_irq_mask(struct irq_data *d)
 {
+	unsigned int irq = d->irq;
 	unsigned int dma = irq_to_dma(irq);
 	unsigned long val;
 
@@ -108,8 +111,9 @@ static void mes_dma_irq_mask(unsigned int irq)
 	writel(val, IO_ADDRESS(MES_DMA_BASE + DMAMODE + (0x80 * dma)));
 }
 
-static void mes_dma_irq_unmask(unsigned int irq)
+static void mes_dma_irq_unmask(struct irq_data *d)
 {
+	unsigned int irq = d->irq;
 	unsigned int dma = irq_to_dma(irq);
 	unsigned long val;
 
@@ -157,7 +161,7 @@ void __init mes_irq_init(void __iomem *base)
 		irq_set_chip(i, &mes_irq_chip);
 		irq_set_chip_data(i, base);
 		irq_set_handler(i, handle_level_irq);
-		irq_set_flags(i, IRQF_VALID | IRQF_PROBE);
+		set_irq_flags(i, IRQF_VALID | IRQF_PROBE);
 	}
 
 	/* set DMA IRQ sources */
@@ -165,6 +169,6 @@ void __init mes_irq_init(void __iomem *base)
 	for (i = dma_to_irq(0); i < dma_to_irq(NR_DMA_IRQS); ++i) {
 		irq_set_chip(i, &mes_dma_irq_chip);
 		irq_set_handler(i, handle_level_irq);
-		irq_set_flags(i, IRQF_VALID);
+		set_irq_flags(i, IRQF_VALID);
 	} 
 }

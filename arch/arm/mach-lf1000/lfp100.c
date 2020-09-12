@@ -34,7 +34,7 @@ struct lfp100_chip {
 	struct work_struct lfp100_work;		/* task			*/
 	struct workqueue_struct *lfp100_tasks;	/* workqueue		*/
 	bool	have_lfp100;			/* 1 = found chip	*/
-	bool	busy;				/* 1 = chip is busy	*/
+	spinlock_t	busy;				/* 1 = chip is busy	*/
 	u8	reg_cache[LFP100_NUMREGS];	/* saved reg values	*/
 	u8	reg_properties[LFP100_NUMREGS];	/* register properties	*/
 	struct	i2c_client *client;
@@ -128,7 +128,7 @@ static int lfp100_available(void)
 	int ret;
 
 	spin_lock_irqsave(&local_chip->busy, flags);
-	ret = !local_chip->busy;
+	ret = !spin_is_locked(&local_chip->busy);
 	spin_unlock_irqrestore(&local_chip->busy, flags);
 
 	return ret;
@@ -153,14 +153,14 @@ int lfp100_write_reg(unsigned int reg, unsigned int value)
 
 	/* serialize access to LFP100 and cache */
 	spin_lock_irqsave(&local_chip->lock, flags);
-	while (local_chip->busy) {
+	while (spin_is_locked(&local_chip->busy)) {
 		spin_unlock_irqrestore(&local_chip->lock, flags);
 		if (wait_event_interruptible(local_chip->wait,
 			(lfp100_available())))
 			return -ERESTARTSYS;
 		spin_lock_irqsave(&local_chip->lock, flags);
 	}
-	local_chip->busy = 1;
+	spin_trylock(&local_chip->busy);
 	spin_unlock_irqrestore(&local_chip->lock, flags);
 
 	/* wait for busy bit to clear */
@@ -198,7 +198,7 @@ int lfp100_write_reg(unsigned int reg, unsigned int value)
 	/* release LFP100 */
 exit:
 	spin_lock_irqsave(&local_chip->lock, flags);
-	local_chip->busy = 0;
+	spin_unlock(&local_chip->busy);
 	spin_unlock_irqrestore(&local_chip->lock, flags);
 	wake_up_interruptible(&local_chip->wait);
 	return ret;
@@ -224,14 +224,14 @@ int lfp100_read_reg(unsigned int reg)
 
 	/* serialize access to LFP100 and cache */
 	spin_lock_irqsave(&local_chip->lock, flags);
-	while (local_chip->busy) {
+	while (spin_is_locked(&local_chip->busy)) {
 		spin_unlock_irqrestore(&local_chip->lock, flags);
 		if (wait_event_interruptible(local_chip->wait,
 			(lfp100_available())))
 			return -ERESTARTSYS;
 		spin_lock_irqsave(&local_chip->lock, flags);
 	}
-	local_chip->busy = 1;
+	spin_trylock(&local_chip->busy);
 	spin_unlock_irqrestore(&local_chip->lock, flags);
 
 	/* return cached value if register is not volatile */
@@ -248,7 +248,7 @@ int lfp100_read_reg(unsigned int reg)
 
 	/* release LFP100 */
 	spin_lock_irqsave(&local_chip->lock, flags);
-	local_chip->busy = 0;
+	spin_unlock(&local_chip->busy);
 	spin_unlock_irqrestore(&local_chip->lock, flags);
 	wake_up_interruptible(&local_chip->wait);
 
@@ -334,14 +334,14 @@ static void lfp100_monitor_task(struct work_struct *work)
 
 	/* serialize access to LFP100 and cache */
 	spin_lock_irqsave(&local_chip->lock, flags);
-	while (local_chip->busy) {
+	while (spin_is_locked(&local_chip->busy)) {
 		spin_unlock_irqrestore(&local_chip->lock, flags);
 		if (wait_event_interruptible(local_chip->wait,
 			(lfp100_available())))
 			return;
 		spin_lock_irqsave(&local_chip->lock, flags);
 	}
-	local_chip->busy = 1;
+	spin_trylock(&local_chip->busy);
 	spin_unlock_irqrestore(&local_chip->lock, flags);
 
 	/* read LFP100 registers */
@@ -371,7 +371,7 @@ static void lfp100_monitor_task(struct work_struct *work)
 
 	/* release LFP100 */
 	spin_lock_irqsave(&local_chip->lock, flags);
-	local_chip->busy = 0;
+	spin_unlock(&local_chip->busy);
 	spin_unlock_irqrestore(&local_chip->lock, flags);
 	wake_up_interruptible(&local_chip->wait);
 
@@ -398,14 +398,14 @@ void lfp100_unmute_hp_sp(void)
 
 	/* serialize access to LFP100 */
 	spin_lock_irqsave(&local_chip->lock, flags);
-	while (local_chip->busy) {
+	while (spin_is_locked(&local_chip->busy)) {
 		spin_unlock_irqrestore(&local_chip->lock, flags);
 		if (wait_event_interruptible(local_chip->wait,
 			(lfp100_available())))
 			return;
 		spin_lock_irqsave(&local_chip->lock, flags);
 	}
-	local_chip->busy = 1;
+	spin_trylock(&local_chip->busy);
 	spin_unlock_irqrestore(&local_chip->lock, flags);
 
 	/* wait for busy bit to clear */
@@ -459,7 +459,7 @@ void lfp100_unmute_hp_sp(void)
 read_err:
 	/* release LFP100 */
 	spin_lock_irqsave(&local_chip->lock, flags);
-	local_chip->busy = 0;
+	spin_unlock(&local_chip->busy);
 	spin_unlock_irqrestore(&local_chip->lock, flags);
 	wake_up_interruptible(&local_chip->wait);
 }
@@ -572,7 +572,8 @@ static int lfp100_chip_probe(struct i2c_client *client,
 	priv->reg_properties[LFP100_GAINADJ_PW] = REG_HAS_PASSWORD;
 	priv->reg_properties[LFP100_VLIMIT_PW]  = REG_HAS_PASSWORD;
 	init_waitqueue_head(&priv->wait);
-	priv->lock = SPIN_LOCK_UNLOCKED;
+	spin_lock_init(&priv->lock);
+	spin_lock_init(&priv->busy);
 
 	/* initialize LFP100 cache by reading registers */
 
