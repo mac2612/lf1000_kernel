@@ -67,9 +67,8 @@ static struct button_entry button_map[] = {
  {-1, -1, BUTTON_HINT, KEY_H, EV_KEY, BUTTON_DELAY},/* hint */
  {-1, -1, BUTTON_PAUSE, KEY_P, EV_KEY, BUTTON_DELAY},/* pause */
  {-1, -1, BUTTON_BRIGHTNESS, KEY_X, EV_KEY, BRIGHTNESS_DELAY},/* brightness */
- //Vol up/down not ready yet
- //{-1, -1, BUTTON_VOLUMEUP, KEY_U, EV_KEY, BUTTON_DELAY}, /* volume up/down */
- //{-1, -1, BUTTON_VOLUMEDOWN, KEY_D, EV_KEY, BUTTON_DELAY}, 
+ {-1, -1, BUTTON_VOLUMEUP, KEY_U, EV_KEY, BUTTON_DELAY}, /* volume up/down */
+ {-1, -1, BUTTON_VOLUMEDOWN, KEY_D, EV_KEY, BUTTON_DELAY}, 
 							/* headphone jack */
  {-1, -1, HEADPHONE_JACK, SW_HEADPHONE_INSERT, EV_SW, BUTTON_DELAY},
 };
@@ -103,7 +102,7 @@ static void input_monitor_task(unsigned long data)
 	for(i = 0; i < ARRAY_SIZE(button_map); i++) {
 		bme = &button_map[i];
 
-		/* assume push GPIO is normally low, invert if needed	*/
+/* assume push GPIO is normally low, invert if needed	*/
 		val = gpio_get_val(bme->port, bme->pin) ^ bme->push;
 		old = bme->debounce & 0x10;
 		bme->debounce = old | ((bme->debounce << 1 | val) & 0xf);

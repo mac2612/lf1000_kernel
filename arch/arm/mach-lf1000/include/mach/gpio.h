@@ -96,7 +96,9 @@ enum gpio_resource {
 	BATTERY_PACK			= 23,
 	SD1_POWER			= 24,
 	LFP100_INT			= 25,
-	GPIO_NUMBER_VALUES		= 26,
+	BUTTON_VOLUMEUP     = 26,
+	BUTTON_VOLUMEDOWN   = 27,
+	GPIO_NUMBER_VALUES		= 28,
 };
 
 /*
