@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux/arm 2.6.37 Kernel Configuration
-# Mon Mar 29 23:58:13 2021
+# Sat Apr  3 16:40:50 2021
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -339,7 +339,7 @@ CONFIG_ALIGNMENT_TRAP=y
 #
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="console=ttyS0,115200n8 root=ubi0_0 rw rootfstype=ubifs ubi.mtd=RFS ubversion=4.3.2.686 loglevel=7 mem=46M mlc_fb=0x82E00000,0x01200000 ram=0x80000000-0x83FFFFFF screen_module=ILI9322 loglevel=7"
+CONFIG_CMDLINE="console=ttyS0,115200n8 root=ubi0_0 rw rootfstype=ubifs ubi.mtd=RFS ubversion=4.3.2.686 loglevel=7 mem=46M mlc_fb=0x82E00000,0x01200000 ram=0x80000000-0x83FFFFFF screen_module=ILI9322 loglevel=7 vt.global_cursor_default=0"
 CONFIG_CMDLINE_FORCE=y
 # CONFIG_XIP_KERNEL is not set
 # CONFIG_KEXEC is not set
@@ -1145,7 +1145,7 @@ CONFIG_BACKLIGHT_LF1000_PWM=y
 # Console display driver support
 #
 CONFIG_DUMMY_CONSOLE=y
-CONFIG_FRAMEBUFFER_CONSOLE=m
+CONFIG_FRAMEBUFFER_CONSOLE=y
 CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY=y
 # CONFIG_FRAMEBUFFER_CONSOLE_ROTATION is not set
 # CONFIG_FONTS is not set
