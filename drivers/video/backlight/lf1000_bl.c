@@ -84,6 +84,7 @@ static int lf1000_bl_probe(struct platform_device *pdev)
 	priv->pdev = pdev;
         memset(&props, 0, sizeof(struct backlight_properties));
         //TODO: set default properties here.
+	props.type = BACKLIGHT_RAW;
 	priv->bl = backlight_device_register("lf1000-pwm-bl",
 			&pdev->dev, priv, &lf1000_bl_ops, &props);
 	if (IS_ERR(priv->bl)) {
