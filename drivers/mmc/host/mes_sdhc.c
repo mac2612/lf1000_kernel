@@ -501,7 +501,7 @@ static void mes_sdio_setup_controller(struct mes_sdio_host *host)
 	mes_sdio_reset_dma(host);
 	mes_sdio_reset_fifo(host);
 
-    mes_sdio_reset_card(host);
+    //mes_sdio_reset_card(host);
 
 
 //	mes_sdio_set_dma(host, 1);
@@ -728,7 +728,6 @@ static void mes_sdio_start_dma_tx(struct mes_sdio_host *host)
 	dma_transfer_init(host->dma_channel, DMA_MEM_IO);
 	dma_sg_write(host->dma_channel, sg, host->mem->start,
 			host->mrq->data->sg_len, ctrl);
-	//dma_start(host->dma_channel);
 }
 
 static void mes_sdio_request(struct mmc_host *mmc, struct mmc_request *mrq)
@@ -1000,11 +999,11 @@ static void mes_sdio_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			mes_sdio_clock_disable(host);
 	}
 
-	if (ios->power_mode != host->power_mode || ios->power_mode == MMC_POWER_OFF) {
+	if (ios->power_mode != host->power_mode) {
 		switch (ios->power_mode) {
 			case MMC_POWER_OFF:
 				mes_sdio_set_clock_out(host, 0);
-				//if (gpio_have_gpio_madrid()) {
+				if (gpio_have_gpio_madrid()) {
 					printk(KERN_WARNING "madrid detected, cutting GPIO power for sd");
 					/* drive bus low before cutting power */
 					mes_sdio_setup_pins(host, 0);
@@ -1013,11 +1012,7 @@ static void mes_sdio_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 						lf1000_l2p_port(power),
 						lf1000_l2p_pin(power),
 						GPIO_GPIOFN, 1, 0, 1);
-				mdelay(100);
-				//} else {
-					/* drive bus low before cutting power */
-			//		mes_sdio_setup_pins(host, 0);
-			//	}
+				}
 				break;
 
 			case MMC_POWER_ON:
@@ -1028,19 +1023,18 @@ static void mes_sdio_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				break;
 
 			case MMC_POWER_UP:
-			//	if (gpio_have_gpio_madrid()) {
+				if (gpio_have_gpio_madrid()) {
 					/* restore power via gpio */
 					printk(KERN_WARNING "Madrid detected, restoring power for SD");
 					gpio_configure_pin(
 						lf1000_l2p_port(power),
 						lf1000_l2p_pin(power),
 						GPIO_GPIOFN, 1, 0, 0);
-			//	}
 					mdelay(5);
 
 					/* restore pins */
 					mes_sdio_setup_pins(host, 1);
-
+				}
 				mdelay(5);
 				break;
 
@@ -1079,6 +1073,7 @@ static int mes_sdio_probe(struct platform_device *pdev)
 	mmc->ops = &mes_sdio_ops;
 
 	mmc->max_segs = 1; // Or 128?
+        //mmc->max_phys_segs = 128;
 	mmc->max_blk_size = 512;
 	mmc->max_blk_count = 128;
 	mmc->max_req_size = mmc->max_blk_size * mmc->max_blk_count;
