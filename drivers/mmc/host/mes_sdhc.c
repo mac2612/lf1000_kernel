@@ -18,7 +18,6 @@
  * - up to 50MHz bus clock
  */
 
-#define DEBUG
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
@@ -169,12 +168,6 @@ static void mes_regs_print(struct mes_sdio_host *host) {
 	printk(KERN_WARNING "%9s:  %u\n", "CHANNEL", host->mmc->index);
 	printk(KERN_WARNING "%9s:  0x%p\n", "ADDRESS", host->base);
 	printk(KERN_WARNING  "\n");
-	//printk(KERN_WARNING "%9s:  0x%08X\n", "CTRL", readl(host->base + SDI_CTRL));
-	//printk(KERN_WARNING "%9s:  0x%08X\n", "CLKDIV", readl(host->base + SDI_CLKDIV));
-    //printk(KERN_WARNING "%9s:  0x%08X\n", "CTRL", readl(host->base + SDI_CTRL));
-
-
-
 	mes_regs_print_reg(host, "CTRL", SDI_CTRL);
 	mes_regs_print_reg(host, "CLKDIV", SDI_CLKDIV);
 	mes_regs_print_reg(host, "CLKENA", SDI_CLKENA);
@@ -312,22 +305,6 @@ static void mes_sdio_init_debugfs(struct mes_sdio_host *host)
 
 static void mes_sdio_reset_controller(struct mes_sdio_host *host)
 {
-
-
-    u32 tmp2 = 0x0;
-	tmp2 |= (1<<STARTCMD);
-	//tmp2 |= (1<<STOPABORT);
-	//tmp2 |= (1<<SENDINIT);
-	tmp2 &= ~(1<<WAITPRVDAT);
-	tmp2 &= ~(0x1F);
-
-	printk(KERN_WARNING "Sending 0x%08X", tmp2);
-
-	writel(tmp2, host->base + SDI_CMD);
-
-	while (readl(host->base + SDI_CMD) & (1<<STARTCMD));
-
-
 	u32 tmp = readl(host->base + SDI_CTRL);
 	tmp |= (1<<ABORT_DATA);
 	writel(tmp, host->base + SDI_CTRL);
@@ -342,30 +319,6 @@ static void mes_sdio_reset_controller(struct mes_sdio_host *host)
     while (readl(host->base + SDI_CTRL) & (1<<CTRLRST));
 	dev_dbg(&host->pdev->dev, "Finished resetting controller\n");
 }
-
-
-static void mes_sdio_reset_card(struct mes_sdio_host *host)
-{
-		const enum gpio_resource power = power_pins[1];
-                    printk(KERN_WARNING "Power cycling the SD card, because reasons.");
-					//mes_sdio_setup_pins(host, 0);
-					/* cut power via gpio */
-					gpio_configure_pin(
-						lf1000_l2p_port(power),
-						lf1000_l2p_pin(power),
-						GPIO_GPIOFN, 1, 0, 1);
-
-						msleep(10);
-					printk(KERN_WARNING "Madrid detected, restoring power for SD");
-					gpio_configure_pin(
-						lf1000_l2p_port(power),
-						lf1000_l2p_pin(power),
-						GPIO_GPIOFN, 1, 0, 0);
-
-
-}
-
-
 
 static void mes_sdio_set_dma(struct mes_sdio_host *host, bool en)
 {
@@ -388,11 +341,13 @@ static void mes_sdio_reset_dma(struct mes_sdio_host *host)
 
 static void mes_sdio_reset_fifo(struct mes_sdio_host *host)
 {
-	printk(KERN_WARNING "Reset fifo");
-	mes_status_print(host);
-    mes_regs_print(host);
+	#ifdef DEBUG
+  	  mes_status_print(host);
+      mes_regs_print(host);
+	#endif
 	u32 tmp = readl(host->base + SDI_CTRL);
 
+    // Clock MUST be enabled during reset or controller will hang.
 	u32 clkena = readl(host->base + SDI_SYSCLKENB);
     writel(0xC, host->base + SDI_SYSCLKENB);
 
@@ -403,7 +358,7 @@ static void mes_sdio_reset_fifo(struct mes_sdio_host *host)
 	while (readl(host->base + SDI_CTRL) & (1<<FIFORST));
 	dev_dbg(&host->pdev->dev, "Finished resetting fifo\n");
 	writel(clkena, host->base + SDI_SYSCLKENB);
-	}
+}
 
 /* Set the RX and TX FIFO thresholds.  The FIFOs are 64 bytes (16 words) long
  * and the recommended values are a TX threshold of (length/2) or 8 and an RX
@@ -437,7 +392,7 @@ static inline void mes_sdio_clear_int_status(struct mes_sdio_host *host)
 static void mes_sdio_interrupt_enable(struct mes_sdio_host *host)
 {
 	u32 tmp = readl(host->base + SDI_CTRL);
-	tmp |= (1<<INT_ENA);/*|(1<<SEND_IRQ_RESP);*/
+	tmp |= (1<<INT_ENA)/*|(1<<SEND_IRQ_RESP)*/;
 	writel(tmp, host->base + SDI_CTRL);
 }
 
@@ -451,7 +406,6 @@ static void mes_sdio_interrupt_intmask(struct mes_sdio_host *host, int en)
 		tmp &= ~(1<<MSKSDIOINT);
 	}
 	writel(tmp, host->base + SDI_INTMASK);
-	//printk(KERN_WARNING "setting sdi_intmask to 0x%8x\n", tmp);
 }
 
 
@@ -501,7 +455,6 @@ static int check_data_error(struct mes_sdio_host *host, u32 irqm)
 static void mes_sdio_setup_controller(struct mes_sdio_host *host)
 {
 	dev_dbg(&host->pdev->dev, "%s\n", __FUNCTION__);
-	printk(KERN_WARNING "AAAAA mes_sdio_setup_controller run!");
 
 	/* Turn off clock output, turn off clock low power mode.  The clock
 	 * output will be enabled later by the MMC subsystem. */
@@ -517,13 +470,9 @@ static void mes_sdio_setup_controller(struct mes_sdio_host *host)
 
 	mes_sdio_interrupt_enable(host);
 
-
 	mes_sdio_reset_controller(host);
 	mes_sdio_reset_dma(host);
 	mes_sdio_reset_fifo(host);
-
-    //mes_sdio_reset_card(host);
-
 
 //	mes_sdio_set_dma(host, 1);
 	mes_sdio_set_dma(host, 0);
@@ -564,7 +513,6 @@ static void mes_sdio_clock_disable(struct mes_sdio_host *host)
 static void mes_sdio_enable_irq(struct mmc_host *mmc, int enable)
 {
 	struct mes_sdio_host *host = mmc_priv(mmc);
-	//printk(KERN_WARNING "mes_sdio_enable_irq %d\n", enable);
 
 	host->sdio_irq_en = enable;
 	mes_sdio_interrupt_intmask(host, enable);
@@ -602,7 +550,6 @@ static int mes_sdio_command_complete(struct mes_sdio_host *host)
 
 	if (mrq->data && (mrq->data->flags & MMC_DATA_WRITE)) {
 		dev_dbg(&host->pdev->dev, "launching DMA TX\n");
-		//printk(KERN_WARNING "Launching DMA TX");
 		WARN_ON(dma_start(host->dma_channel));
 	}
 
@@ -692,7 +639,6 @@ static irqreturn_t mes_sdio_irq(int irq, void *dev_id)
 out_req:
 	if (irqm & (1<<SDIOINT)) {
 		dev_dbg(&host->pdev->dev, "SDIO interrupt occured\n");
-		//printk(KERN_WARNING "SDIO interrupt occured\n");
 		mmc_signal_sdio_irq(host->mmc);
 	}
 
@@ -736,8 +682,6 @@ static void mes_sdio_start_dma_tx(struct mes_sdio_host *host)
 	struct scatterlist *sg = host->mrq->data->sg;
 
 	dev_dbg(&host->pdev->dev, "%s\n", __FUNCTION__);
-	//printk(KERN_WARNING "Start DMA Transfer");
-	//msleep(10);
 
 	if (host->dma_active)
 		wait_for_completion(&host->dma_transfer);
@@ -755,7 +699,6 @@ static void mes_sdio_start_dma_tx(struct mes_sdio_host *host)
 	dma_transfer_init(host->dma_channel, DMA_MEM_IO);
 	dma_sg_write(host->dma_channel, sg, host->mem->start,
 			host->mrq->data->sg_len, ctrl);
-	//dma_start(host->dma_channel);
 }
 
 static void mes_sdio_request(struct mmc_host *mmc, struct mmc_request *mrq)
@@ -798,8 +741,6 @@ static void mes_sdio_request(struct mmc_host *mmc, struct mmc_request *mrq)
 
 	/* Preserve the SDIO Interrupt setting. */
 	irqm |= (host->sdio_irq_en<<MSKSDIOINT);
-	//irqm |= (1<<MSKSDIOINT);
-
 
 	if (mrq->data) {
 		int i;
@@ -888,7 +829,7 @@ static int mes_sdio_update_clock(struct mes_sdio_host *host)
 	/* send a clock update command and wait for it to complete, repeat if
 	 * a HLEINT occurs */
 	while (1) {
-		writel((1<<STARTCMD)|(1<<UPDATECLKONLY),//|(1<<WAITPRVDAT),
+		writel((1<<STARTCMD)|(1<<UPDATECLKONLY)|(1<<WAITPRVDAT),
 				host->base + SDI_CMD);
 
 		tout = 0;
@@ -1000,9 +941,6 @@ static void mes_sdio_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	if (host->power_mode != MMC_POWER_OFF && mes_sdio_card_busy(host)) {
 		dev_err(&host->pdev->dev, "%s.%d card (%p) channel(%d) busy\n",
 			__FUNCTION__, __LINE__, host->base, host->channel);
-		mes_status_print(host);
-	    mes_regs_print(host);
-		return;
 	}
 	//Set DAT3 (CS in SPI mode) high if requested or allow MMC controller to drive it if not
 	if (ios->chip_select == MMC_CS_HIGH)
@@ -1029,7 +967,7 @@ static void mes_sdio_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 					host->clock_hz);
 			}
 		} else
-		    printk(KERN_WARNING "Skip clock disable");
+		    printk(KERN_WARNING "FIXME: Skip clock disable\n");
 			//mes_sdio_clock_disable(host);
 	}
 
@@ -1088,7 +1026,6 @@ static struct mmc_host_ops mes_sdio_ops = {
 
 static int mes_sdio_probe(struct platform_device *pdev)
 {
-
 	struct mmc_host *mmc;
 	struct mes_sdio_host *host = NULL;
 	struct resource *res;
@@ -1173,9 +1110,11 @@ static int mes_sdio_probe(struct platform_device *pdev)
 		goto out_dma;
 	}
 
+    #ifdef DEBUG
 	printk(KERN_WARNING "pre-probe regs:");
 	mes_status_print(host);
     mes_regs_print(host);
+	#endif
 
 	/* prepare the hardware */
 	mes_sdio_setup_pins(host, 1);
@@ -1188,9 +1127,6 @@ static int mes_sdio_probe(struct platform_device *pdev)
 	mmc_add_host(mmc);
 
 	dev_dbg(&pdev->dev, "\"%s\" probe complete\n", host->name);
-
-	mes_status_print(host);
-	mes_regs_print(host);
 
 	return 0;
 
