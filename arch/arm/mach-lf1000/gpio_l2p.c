@@ -365,10 +365,20 @@ static void init_madrid(void)
 	l2p_gpio_port_map[DPAD_LEFT]		[GPIO_PIN]  = MADRID_DPAD_LEFT_PIN;
 	l2p_gpio_port_map[DPAD_RIGHT]		[GPIO_PORT] = MADRID_DPAD_RIGHT_PORT;
 	l2p_gpio_port_map[DPAD_RIGHT]		[GPIO_PIN]  = MADRID_DPAD_RIGHT_PIN;
-	l2p_gpio_port_map[DPAD_UP]		[GPIO_PORT] = MADRID_DPAD_UP_PORT;
-	l2p_gpio_port_map[DPAD_UP]		[GPIO_PIN]  = MADRID_DPAD_UP_PIN;
+	l2p_gpio_port_map[DPAD_UP]		    [GPIO_PORT] = MADRID_DPAD_UP_PORT;
+	l2p_gpio_port_map[DPAD_UP]		    [GPIO_PIN]  = MADRID_DPAD_UP_PIN;
 	l2p_gpio_port_map[DPAD_DOWN]		[GPIO_PORT] = MADRID_DPAD_DOWN_PORT;
 	l2p_gpio_port_map[DPAD_DOWN]		[GPIO_PIN]  = MADRID_DPAD_DOWN_PIN;
+
+
+
+	l2p_gpio_port_map[BUTTON_VOLUMEUP]		[GPIO_PORT] = MADRID_BUTTON_VOLUMEUP_PORT;
+	l2p_gpio_port_map[BUTTON_VOLUMEUP]		[GPIO_PIN] = MADRID_BUTTON_VOLUMEUP_PIN;
+	l2p_gpio_port_map[BUTTON_VOLUMEDOWN]	[GPIO_PORT] = MADRID_BUTTON_VOLUMEDOWN_PORT;
+	l2p_gpio_port_map[BUTTON_VOLUMEDOWN]	[GPIO_PIN] = MADRID_BUTTON_VOLUMEDOWN_PIN;
+
+	l2p_gpio_port_map[BUTTON_HOME]	        [GPIO_PORT] = MADRID_BUTTON_HOME_PORT;
+	l2p_gpio_port_map[BUTTON_HOME]	        [GPIO_PIN] = MADRID_BUTTON_HOME_PIN;
 
 	l2p_gpio_port_map[DOCK_POWER]		[GPIO_PORT] = MADRID_DOCK_POWER_PORT;
 	l2p_gpio_port_map[DOCK_POWER]		[GPIO_PIN]  = MADRID_DOCK_POWER_PIN;
