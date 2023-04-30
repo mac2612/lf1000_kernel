@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux/arm 2.6.37 Kernel Configuration
-# Sat Apr  3 16:40:50 2021
+# Sat Apr 29 20:59:49 2023
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -339,7 +339,7 @@ CONFIG_ALIGNMENT_TRAP=y
 #
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
-CONFIG_CMDLINE="console=ttyS0,115200n8 root=ubi0_0 rw rootfstype=ubifs ubi.mtd=RFS ubversion=4.3.2.686 loglevel=7 mem=46M mlc_fb=0x82E00000,0x01200000 ram=0x80000000-0x83FFFFFF screen_module=ILI9322 loglevel=7 vt.global_cursor_default=0"
+CONFIG_CMDLINE="console=ttyS0,115200n8 rw loglevel=7 mem=46M mlc_fb=0x82E00000,0x01200000 ram=0x80000000-0x83FFFFFF loglevel=7 vt.global_cursor_default=0 screen_module=ILI6480G2 root=/dev/mmcblk0p3 rootfstype=ext4 init=/sbin/init rootwait"
 CONFIG_CMDLINE_FORCE=y
 # CONFIG_XIP_KERNEL is not set
 # CONFIG_KEXEC is not set
@@ -1154,8 +1154,8 @@ CONFIG_FONT_8x16=y
 CONFIG_LOGO=y
 CONFIG_LOGO_LINUX_MONO=y
 CONFIG_LOGO_LINUX_VGA16=y
-CONFIG_LOGO_LINUX_CLUT224=y
 # CONFIG_LOGO_LINUX_SURGEON_CLUT224 is not set
+CONFIG_LOGO_LINUX_CLUT224=y
 CONFIG_SOUND=y
 # CONFIG_SOUND_OSS_CORE is not set
 CONFIG_SND=y
@@ -1469,6 +1469,18 @@ CONFIG_RTC_DRV_LF1000=y
 # CONFIG_AUXDISPLAY is not set
 # CONFIG_UIO is not set
 # CONFIG_STAGING is not set
+
+#
+# LF1000 devices
+#
+# CONFIG_LFCART is not set
+# CONFIG_DIDJ_VOLUME is not set
+# CONFIG_GPSP_WARM is not set
+# CONFIG_LF1000_DPC is not set
+# CONFIG_LF1000_MLC is not set
+# CONFIG_LF1000_GA3D is not set
+# CONFIG_LF1000_IDCT is not set
+# CONFIG_LF1000_ATAP is not set
 
 #
 # File systems

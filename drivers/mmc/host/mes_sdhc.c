@@ -159,6 +159,40 @@ static int mes_regs_show(struct seq_file *s, void *v)
 	return 0;
 }
 
+static void mes_regs_print_reg(struct mes_sdio_host *host, const char *nm, u32 reg)
+{
+	printk(KERN_WARNING "%9s:  0x%08X\n", nm, readl(host->base + reg));
+}
+
+static void mes_regs_print(struct mes_sdio_host *host) {
+	printk(KERN_WARNING "%9s:  %u\n", "CHANNEL", host->mmc->index);
+	printk(KERN_WARNING "%9s:  0x%p\n", "ADDRESS", host->base);
+	printk(KERN_WARNING  "\n");
+	mes_regs_print_reg(host, "CTRL", SDI_CTRL);
+	mes_regs_print_reg(host, "CLKDIV", SDI_CLKDIV);
+	mes_regs_print_reg(host, "CLKENA", SDI_CLKENA);
+	mes_regs_print_reg(host, "TMOUT", SDI_TMOUT);
+	mes_regs_print_reg(host, "CTYPE", SDI_CTYPE);
+	mes_regs_print_reg(host, "BLKSIZ", SDI_BLKSIZ);
+	mes_regs_print_reg(host, "BYTCNT", SDI_BYTCNT);
+	mes_regs_print_reg(host, "INTMASK", SDI_INTMASK);
+	mes_regs_print_reg(host, "CMDARG", SDI_CMDARG);
+	mes_regs_print_reg(host, "CMD", SDI_CMD);
+	mes_regs_print_reg(host, "RESP0", SDI_RESP0);
+	mes_regs_print_reg(host, "RESP1", SDI_RESP1);
+	mes_regs_print_reg(host, "RESP2", SDI_RESP2);
+	mes_regs_print_reg(host, "RESP3", SDI_RESP3);
+	mes_regs_print_reg(host, "MINTSTS", SDI_MINTSTS);
+	mes_regs_print_reg(host, "RINTSTS", SDI_RINTSTS);
+	mes_regs_print_reg(host, "STATUS", SDI_STATUS);
+	mes_regs_print_reg(host, "FIFOTH", SDI_FIFOTH);
+	mes_regs_print_reg(host, "TCBCNT", SDI_TCBCNT);
+	mes_regs_print_reg(host, "TBBCNT", SDI_TBBCNT);
+	mes_regs_print_reg(host, "DAT", SDI_DAT);
+	mes_regs_print_reg(host, "SYSCLKENB", SDI_SYSCLKENB);
+	mes_regs_print_reg(host, "CLKGEN", SDI_CLKGEN);	
+}
+
 static void mes_status_show_bit(struct seq_file *s, const char *nm, u32 v)
 {
 	seq_printf(s, "%10s:\t%d\n", nm, !!v);
@@ -167,6 +201,16 @@ static void mes_status_show_bit(struct seq_file *s, const char *nm, u32 v)
 static void mes_status_show_hex(struct seq_file *s, const char *nm, u32 v)
 {
 	seq_printf(s, "%10s:\t0x%X\n", nm, v);
+}
+
+static void mes_status_print_bit(const char *nm, u32 v)
+{
+	printk(KERN_WARNING "%10s:\t%d\n", nm, !!v);
+}
+
+static void mes_status_print_hex(const char *nm, u32 v)
+{
+	printk(KERN_WARNING "%10s:\t0x%X\n", nm, v);
 }
 
 static int mes_status_show(struct seq_file *s, void *v)
@@ -186,6 +230,26 @@ static int mes_status_show(struct seq_file *s, void *v)
 	mes_status_show_bit(s, "FIFOEMPTY", status & (1<<FIFOEMPTY));
 	mes_status_show_bit(s, "TXWMARK", status & (1<<TXWMARK));
 	mes_status_show_bit(s, "RXWMARK", status & (1<<RXWMARK));
+
+	return 0;
+}
+
+static int mes_status_print(struct mes_sdio_host *host)
+{
+	u32 status = readl(host->base + SDI_STATUS);
+
+	mes_status_print_bit("DMAREQ", status & (1<<DMAREQ));
+	mes_status_print_bit("DMAACK", status & (1<<DMAACK));
+	mes_status_print_hex("FIFOCOUNT", (status>>FIFOCOUNT) & 0x1F);
+	mes_status_print_hex("RSPINDEX", (status>>RSPINDEX) & 0x3F);
+	mes_status_print_bit("FSMBUSY", status & (1<<FSMBUSY));
+	mes_status_print_bit("DATBUSY", status & (1<<DATBUSY));
+	mes_status_print_bit("CPRESENT", status & (1<<CPRESENT));
+	mes_status_print_hex("CMDFSM", (status>>CMDFSM) & 0xF);
+	mes_status_print_bit("FIFOFULL", status & (1<<FIFOFULL));
+	mes_status_print_bit("FIFOEMPTY", status & (1<<FIFOEMPTY));
+	mes_status_print_bit("TXWMARK", status & (1<<TXWMARK));
+	mes_status_print_bit("RXWMARK", status & (1<<RXWMARK));
 
 	return 0;
 }
@@ -242,12 +306,17 @@ static void mes_sdio_init_debugfs(struct mes_sdio_host *host)
 static void mes_sdio_reset_controller(struct mes_sdio_host *host)
 {
 	u32 tmp = readl(host->base + SDI_CTRL);
+	tmp |= (1<<ABORT_DATA);
+	writel(tmp, host->base + SDI_CTRL);
+    while (readl(host->base + SDI_CTRL) & (1<<ABORT_DATA));
+
+	tmp = readl(host->base + SDI_CTRL);
 
 	tmp &= ~((1<<DMARST)|(1<<FIFORST));
 	tmp |= (1<<CTRLRST);
 	writel(tmp, host->base + SDI_CTRL);
 
-	while (readl(host->base + SDI_CTRL) & (1<<CTRLRST));
+    while (readl(host->base + SDI_CTRL) & (1<<CTRLRST));
 	dev_dbg(&host->pdev->dev, "Finished resetting controller\n");
 }
 
@@ -272,7 +341,15 @@ static void mes_sdio_reset_dma(struct mes_sdio_host *host)
 
 static void mes_sdio_reset_fifo(struct mes_sdio_host *host)
 {
+	#ifdef DEBUG
+  	  mes_status_print(host);
+      mes_regs_print(host);
+	#endif
 	u32 tmp = readl(host->base + SDI_CTRL);
+
+    // Clock MUST be enabled during reset or controller will hang.
+	u32 clkena = readl(host->base + SDI_SYSCLKENB);
+    writel(0xC, host->base + SDI_SYSCLKENB);
 
 	tmp &= ~((1<<DMARST)|(1<<CTRLRST));
 	tmp |= (1<<FIFORST);
@@ -280,6 +357,7 @@ static void mes_sdio_reset_fifo(struct mes_sdio_host *host)
 
 	while (readl(host->base + SDI_CTRL) & (1<<FIFORST));
 	dev_dbg(&host->pdev->dev, "Finished resetting fifo\n");
+	writel(clkena, host->base + SDI_SYSCLKENB);
 }
 
 /* Set the RX and TX FIFO thresholds.  The FIFOs are 64 bytes (16 words) long
@@ -317,6 +395,19 @@ static void mes_sdio_interrupt_enable(struct mes_sdio_host *host)
 	tmp |= (1<<INT_ENA)/*|(1<<SEND_IRQ_RESP)*/;
 	writel(tmp, host->base + SDI_CTRL);
 }
+
+static void mes_sdio_interrupt_intmask(struct mes_sdio_host *host, int en)
+{
+	u32 tmp = readl(host->base + SDI_INTMASK);
+	if (en) {
+	    tmp |= (1<<MSKSDIOINT);
+	}
+	else {
+		tmp &= ~(1<<MSKSDIOINT);
+	}
+	writel(tmp, host->base + SDI_INTMASK);
+}
+
 
 static int check_command_error(struct mes_sdio_host *host, u32 irqm)
 {
@@ -424,6 +515,7 @@ static void mes_sdio_enable_irq(struct mmc_host *mmc, int enable)
 	struct mes_sdio_host *host = mmc_priv(mmc);
 
 	host->sdio_irq_en = enable;
+	mes_sdio_interrupt_intmask(host, enable);
 }
 
 /*
@@ -732,7 +824,8 @@ static void mes_sdio_set_clock_out(struct mes_sdio_host *host, bool en)
 static int mes_sdio_update_clock(struct mes_sdio_host *host)
 {
 	u32 tout, tmp;
-
+	u32 clkena = readl(host->base + SDI_SYSCLKENB);
+    writel(0xC, host->base + SDI_SYSCLKENB);
 	/* send a clock update command and wait for it to complete, repeat if
 	 * a HLEINT occurs */
 	while (1) {
@@ -754,6 +847,7 @@ static int mes_sdio_update_clock(struct mes_sdio_host *host)
 		tmp |= (1<<HLEINT);
 		writel(tmp, host->base + SDI_RINTSTS);
 	}
+	writel(clkena, host->base + SDI_SYSCLKENB);
 
 	return 0;
 }
@@ -840,6 +934,7 @@ static void mes_sdio_setup_pins(struct mes_sdio_host *host, const int on)
 static void mes_sdio_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 {
 	struct mes_sdio_host *host = mmc_priv(mmc);
+	const enum gpio_resource power = power_pins[host->channel];
 
 	dev_dbg(&host->pdev->dev, "%s\n", __FUNCTION__);
 
@@ -872,16 +967,24 @@ static void mes_sdio_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 					host->clock_hz);
 			}
 		} else
-			mes_sdio_clock_disable(host);
+		    printk(KERN_WARNING "FIXME: Skip clock disable\n");
+			//mes_sdio_clock_disable(host);
 	}
 
 	if (ios->power_mode != host->power_mode) {
 		switch (ios->power_mode) {
 			case MMC_POWER_OFF:
 				mes_sdio_set_clock_out(host, 0);
-
+				if (gpio_have_gpio_madrid()) {
+					printk(KERN_WARNING "madrid detected, cutting GPIO power for sd");
 					/* drive bus low before cutting power */
 					mes_sdio_setup_pins(host, 0);
+					/* cut power via gpio */
+					gpio_configure_pin(
+						lf1000_l2p_port(power),
+						lf1000_l2p_pin(power),
+						GPIO_GPIOFN, 1, 0, 1);
+				}
 				break;
 
 			case MMC_POWER_ON:
@@ -892,12 +995,18 @@ static void mes_sdio_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 				break;
 
 			case MMC_POWER_UP:
-
+				if (gpio_have_gpio_madrid()) {
+					/* restore power via gpio */
+					printk(KERN_WARNING "Madrid detected, restoring power for SD");
+					gpio_configure_pin(
+						lf1000_l2p_port(power),
+						lf1000_l2p_pin(power),
+						GPIO_GPIOFN, 1, 0, 0);
 					mdelay(5);
 
 					/* restore pins */
 					mes_sdio_setup_pins(host, 1);
-
+				}
 				mdelay(5);
 				break;
 
@@ -934,7 +1043,8 @@ static int mes_sdio_probe(struct platform_device *pdev)
 
 	mmc->ops = &mes_sdio_ops;
 
-	mmc->max_segs = 128; // Or 1?
+	mmc->max_segs = 1; // Or 128?
+        //mmc->max_phys_segs = 128;
 	mmc->max_blk_size = 512;
 	mmc->max_blk_count = 128;
 	mmc->max_req_size = mmc->max_blk_size * mmc->max_blk_count;
@@ -947,7 +1057,7 @@ static int mes_sdio_probe(struct platform_device *pdev)
 	       MMC_VDD_34_35 | MMC_VDD_35_36;
 
 	mmc->caps = MMC_CAP_4_BIT_DATA | MMC_CAP_SD_HIGHSPEED |
-		MMC_CAP_SDIO_IRQ | MMC_CAP_NONREMOVABLE;
+		MMC_CAP_SDIO_IRQ | MMC_CAP_NEEDS_POLL;
 
 	if (!request_mem_region(res->start, RESSIZE(res), res->name)) {
 		dev_err(&pdev->dev, "failed to get IO memory region\n");
@@ -999,6 +1109,12 @@ static int mes_sdio_probe(struct platform_device *pdev)
 				ret);
 		goto out_dma;
 	}
+
+    #ifdef DEBUG
+	printk(KERN_WARNING "pre-probe regs:");
+	mes_status_print(host);
+    mes_regs_print(host);
+	#endif
 
 	/* prepare the hardware */
 	mes_sdio_setup_pins(host, 1);

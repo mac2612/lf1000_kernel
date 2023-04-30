@@ -3288,13 +3288,15 @@ int nand_scan_ident(struct mtd_info *mtd, int maxchips,
 	/* Read the flash type */
 	type = nand_get_flash_type(mtd, chip, busw,
 				&nand_maf_id, &nand_dev_id, table);
-
 	if (IS_ERR(type)) {
 		if (!(chip->options & NAND_SCAN_SILENT_NODEV))
 			printk(KERN_WARNING "No NAND device found.\n");
 		chip->select_chip(mtd, -1);
 		return PTR_ERR(type);
 	}
+
+	if (nand_maf_id == 0x49 && nand_dev_id == 0x49)
+	  return 0;
 
 	/* Check for a chip array */
 	for (i = 1; i < maxchips; i++) {
